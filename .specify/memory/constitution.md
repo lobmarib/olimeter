@@ -1,50 +1,125 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+SYNC IMPACT REPORT
+==================
+Version: 1.0.0 → 1.1.0 → 1.1.1 (PATCH: Java version updated)
+Ratified: 2026-02-20
+Last Amended: 2026-02-23
+
+CHANGES SUMMARY:
+- Type: Amendment - Technology Stack Specification
+- Added concrete technology choices for backend, frontend, mobile, and database
+- Enforces consistency across all layers
+
+PRINCIPLES (5 total - UNCHANGED):
+✅ I. API-First Design - Define contracts before implementation
+✅ II. Separation of Concerns - Organize by domain (backend, web, mobile, database)
+✅ III. Database Schema Versioning - Track all schema changes in migrations
+✅ IV. Testing Requirements - Backend: unit & integration; Frontend/Mobile: component tests
+✅ V. Minimal Complexity - No premature abstraction
+
+SECTIONS:
+✅ Code Organization - Monorepo structure with clear boundaries
+✅ Development Workflow - 6-step ordered process with API-first precedence
+✅ Technology Stack - NEW (Backend, Frontend, Mobile, Database specifications)
+✅ Governance - Amendment procedures with semantic versioning
+
+TECHNOLOGY ADDITIONS:
+- Backend: Spring Boot 4.0.1, Java 21 LTS, Gradle 9.3.0 with Kotlin DSL, Docker Java SDK, SpringDoc OpenAPI
+- Frontend: React 19.2.4, TypeScript 5.9, Ant Design 6.2.0, React Query + Context API, Axios, Vite
+- Mobile: React Native (cross-platform iOS/Android)
+- Database: PostgreSQL 15+ (open-source, battle-tested SQL database)
+
+TEMPLATE SYNC STATUS:
+✅ .specify/templates/plan-template.md - Updated (Technical Context section now has concrete versions)
+✅ .specify/templates/spec-template.md - Aligned (FR requirements now scoped to chosen stack)
+✅ .specify/templates/tasks-template.md - Aligned (Task templates account for layered architecture)
+
+DEFERRED ITEMS: None
+
+NEXT STEPS:
+1. Run /speckit.plan after feature specs are defined
+2. Constitution Check gate validates API-First + Tech Stack adherence
+3. Tasks reference Spring Boot service paths, React component paths, React Native screen paths
+-->
+
+# OliMeeter Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. API-First Design
+Backend API MUST define contracts before frontend/mobile implementation begins. All client-server communication through RESTful endpoints with documented request/response schemas. Breaking API changes require version bumping.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Separation of Concerns
+Code MUST be organized by domain: backend services, web app, mobile app, and database migrations kept separate. Each tier has independent deployment cycle and can be tested in isolation.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Database Schema Versioning
+All schema changes MUST be tracked in migrations. No direct database modifications outside version control. Migrations MUST be reversible when possible. Schema changes require corresponding backend and client coordination.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Testing Requirements
+Backend: unit tests for business logic, integration tests for API endpoints. Web/Mobile: component tests for UI logic. All PRs require passing tests before merge.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Minimal Complexity
+Start with essential features only. No premature abstraction or over-architecting. Prefer simple solutions over framework magic.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Code Organization
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+Monorepo or multi-repo structure with clear boundaries:
+- `/backend` - REST API, business logic, database connectivity
+- `/web` - Web application frontend
+- `/mobile` - Mobile application code
+- `/database` - Schema migrations and initialization scripts
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Technology Stack
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+All layers MUST use the specified technology versions. Deviations require amendment.
+
+### Backend Stack
+- **Framework**: Spring Boot 4.0.1 (latest stable)
+- **Language**: Java 25
+- **Build Tool**: Gradle 9.3.0 with Kotlin DSL
+- **Docker Integration**: Docker Java SDK (docker-java)
+- **API Documentation**: SpringDoc OpenAPI (Swagger UI)
+- **Testing**: JUnit 5, Mockito, Spring Test
+
+### Frontend Stack (Web)
+- **Framework**: React 19.2.4 with TypeScript 5.9
+- **UI Library**: Ant Design 6.2.0 (latest stable)
+- **State Management**: React Query for server state, Context API for UI state
+- **HTTP Client**: Axios with TypeScript types
+- **Build Tool**: Vite for development and production builds
+- **Testing**: Vitest, React Testing Library
+
+### Mobile Stack
+- **Framework**: React Native (cross-platform iOS/Android)
+- **Language**: TypeScript (same as web for consistency)
+- **State Management**: React Query for server state, Context API for UI state
+- **HTTP Client**: Axios with TypeScript types
+- **Testing**: Jest, React Native Testing Library
+
+### Database Stack
+- **Database**: PostgreSQL 15+ (open-source SQL database)
+- **Query Language**: SQL with prepared statements (no SQL injection vulnerabilities)
+- **Migrations**: Flyway or Liquibase for schema versioning from backend
+- **ORM** (optional in backend): Spring Data JPA with Hibernate as persistence provider
+
+### Technology Rationale
+- **Java 25**: Latest stable release with modern language features and optimizations
+- **Spring Boot**: Mature ecosystem, built-in conventions reduce boilerplate
+- **PostgreSQL**: Reliable open-source RDBMS with strong JSONB support for flexible schemas
+- **React + TypeScript**: Type safety reduces bugs, consistent web + mobile codebase
+- **React Native**: Single codebase for iOS/Android, shared business logic with web
+
+## Development Workflow
+
+1. Changes start with documented requirements
+2. Backend API changes precede client implementation
+3. Schema changes require migration files
+4. All code changes include tests
+5. Code review verifies architecture consistency and technology stack adherence
+6. Deployment: backend/database first (with migrations), then web/mobile clients
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other development guidelines. Amendments require documentation of the change rationale and impact assessment on existing services. Version increments follow semantic versioning: MAJOR for principle changes, MINOR for clarifications, PATCH for non-semantic updates.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.1.1 | **Ratified**: 2026-02-20 | **Last Amended**: 2026-02-23
