@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Requisição Interna</title>
+
+  <!-- Material Design 3 style tokens -->
+  <style>
+    :root {
+      /* Core M3 scheme */
+      --md-sys-color-primary: #6750A4;
+      --md-sys-color-on-primary: #FFFFFF;
+      --md-sys-color-primary-container: #EADDFF;
+      --md-sys-color-on-primary-container: #21005D;
+
+      --md-sys-color-secondary: #625B71;
+      --md-sys-color-on-secondary: #FFFFFF;
+      --md-sys-color-surface: #FFFBFE;
+      --md-sys-color-surface-dim: #E6E0E9;
+      --md-sys-color-surface-container-low: #F7F2FA;
+      --md-sys-color-outline: #79747E;
+      --md-sys-color-error: #B3261E;
+      --md-sys-color-on-error: #FFFFFF;
+
+      --md-sys-color-on-surface: #1D1B20;
+      --md-sys-color-on-surface-variant: #49454F;
+
+      /* Shapes */
+      --md-sys-shape-corner-medium: 12px;
+      --md-sys-shape-corner-large: 16px;
+      --md-sys-shape-corner-extra-large: 28px;
+
+      /* State layer opacities */
+      --md-state-hover-opacity: 0.08;
+      --md-state-focus-opacity: 0.12;
+      --md-state-pressed-opacity: 0.12;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
+      background: var(--md-sys-color-surface);
+      color: var(--md-sys-color-on-surface);
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .form-card {
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: var(--md-sys-shape-corner-large);
+      padding: 24px;
+      border: 1px solid rgba(121, 116, 126, 0.3);
+    }
+
+    .form-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .form-header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    .requisicao-numero {
+      padding: 4px 12px;
+      border-radius: var(--md-sys-shape-corner-medium);
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+    }
+
+    /* Typography */
+    .headline-small {
+      font-size: 24px;
+      line-height: 32px;
+      font-weight: 600;
+    }
+
+    .title-medium {
+      font-size: 16px;
+      line-height: 24px;
+      font-weight: 500;
+    }
+
+    .body-medium {
+      font-size: 14px;
+      line-height: 20px;
+    }
+
+    .label-medium {
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Choice row */
+    .choice-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .md-radio {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: var(--md-sys-shape-corner-medium);
+    }
+
+    .md-radio input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .md-radio-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--md-sys-color-outline);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .md-radio input:checked + .md-radio-icon {
+      border-color: var(--md-sys-color-primary);
+    }
+
+    .md-radio input:checked + .md-radio-icon::after {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--md-sys-color-primary);
+    }
+
+    .md-radio:focus-visible {
+      outline: none;
+      background: rgba(103, 80, 164, var(--md-state-focus-opacity));
+    }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    /* Field */
+    .field {
+      position: relative;
+    }
+
+    .field-label {
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    .md-filled-field {
+      position: relative;
+      border-radius: 12px;
+      background: #E7E0EC;
+      padding: 12px 16px 4px 16px;
+      display: flex;
+      align-items: center;
+      min-height: 56px;
+    }
+
+    .md-filled-field select,
+    .md-filled-field input {
+      border: none;
+      outline: none;
+      background: transparent;
+      width: 100%;
+      font-size: 14px;
+      line-height: 20px;
+      color: var(--md-sys-color-on-surface);
+    }
+
+    .md-filled-field select {
+      appearance: none;
+    }
+
+    .md-filled-field input[type="number"]::-webkit-outer-spin-button,
+    .md-filled-field input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    .md-filled-field input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    .md-filled-field::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(73, 69, 79, 0.4);
+      pointer-events: none;
+    }
+
+    .md-filled-field:hover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: rgba(103, 80, 164, var(--md-state-hover-opacity));
+      pointer-events: none;
+    }
+
+    .md-filled-field:focus-within::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: rgba(103, 80, 164, var(--md-state-focus-opacity));
+      pointer-events: none;
+    }
+
+    /* Combustível table */
+    .combustivel-card {
+      background: var(--md-sys-color-surface);
+      border-radius: var(--md-sys-shape-corner-large);
+      border: 1px solid rgba(121, 116, 126, 0.3);
+      padding: 16px;
+    }
+
+    .combustivel-header,
+    .combustivel-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .combustivel-header {
+      margin-bottom: 8px;
+    }
+
+    .combustivel-header span {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface-variant);
+      text-transform: uppercase;
+    }
+
+    .combustivel-row {
+      margin-bottom: 8px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .observacoes-field {
+      min-height: 160px;
+      align-items: flex-start;
+    }
+
+    .observacoes-field textarea {
+      resize: vertical;
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 24px;
+      gap: 16px;
+    }
+
+    .md-button {
+      position: relative;
+      min-width: 96px;
+      min-height: 48px;
+      padding: 0 24px;
+      border-radius: var(--md-sys-shape-corner-extra-large);
+      border: none;
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .md-button:hover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+
+    .md-button:active::after {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .md-button:focus-visible::after {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    @media (max-width: 720px) {
+      .grid,
+      .grid-2,
+      .combustivel-header,
+      .combustivel-row {
+        grid-template-columns: 1fr;
+      }
+      .form-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .form-header-right {
+        align-items: flex-start;
+      }
+      .actions {
+        justify-content: stretch;
+      }
+      .actions .md-button {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <section class="form-card" aria-label="Requisição interna de combustível">
+    <header class="form-header">
+      <div class="form-header-left">
+        <div class="headline-small">Requisição interna</div>
+        <div class="body-medium">Oliveiras – Engenharia e Construção</div>
+      </div>
+      <div class="form-header-right">
+        <div class="label-medium">Requisição interna nº</div>
+        <div class="requisicao-numero title-medium" id="reqNumber">306410</div>
+      </div>
+    </header>
+
+    <!-- Tipo choice: Veículo / Máquina -->
+    <div class="choice-row" aria-label="Tipo de requisição">
+      <span class="label-medium">Destino Combustível</span>
+      <label class="md-radio body-medium">
+        <input type="radio" name="tipo" value="veiculo" checked />
+        <span class="md-radio-icon"></span>
+        Veículo
+      </label>
+      <label class="md-radio body-medium">
+        <input type="radio" name="tipo" value="maquina" />
+        <span class="md-radio-icon"></span>
+        Máquina
+      </label>
+      <label class="md-radio body-medium">
+        <input type="radio" name="tipo" value="deposito" />
+        <span class="md-radio-icon"></span>
+        Depósito
+      </label>
+    </div>
+
+    <!-- Main grid: Viatura/Máquina fields conditionally shown -->
+    <div class="grid">
+      <!-- Veículo field (visible by default) -->
+      <div class="field" id="veiculoField">
+        <span class="field-label label-medium">Matrícula</span>
+        <div class="md-filled-field">
+          <select id="veiculoSelect" aria-label="Viatura">
+            <option value="" selected disabled>Selecionar viatura</option>
+            <option value="a91">AA-22-BB</option>
+            <option value="a92">CC-33-DD</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Máquina field (hidden by default) -->
+      <div class="field" id="maquinaField" style="display:none;">
+        <span class="field-label label-medium">Máquina</span>
+        <div class="md-filled-field">
+          <select id="maquinaSelect" aria-label="Máquina">
+            <option value="" selected disabled>Selecionar máquina</option>
+            <option value="caterpillar">Caterpillar X1</option>
+            <option value="Hitachi">Hitachi Y2</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" id="depositoField" style="display:none;">
+        <span class="field-label label-medium">Depósito</span>
+        <div class="md-filled-field">
+          <select id="depositoSelect" aria-label="Depósito">
+            <option value="" selected disabled>Selecionar depósito</option>
+            <option value="TCM">TCM</option>
+            <option value="TCA">TCA</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Local (combo) -->
+      <div class="field" id="localField">
+        <span class="field-label label-medium">Origem combustível</span>
+        <div class="md-filled-field">
+          <select aria-label="Local">
+            <option value="" selected disabled>Selecionar local</option>
+            <option value="sede">Sede</option>
+            <option value="tcm-1">TCM-1</option>
+            <option value="tca-2">TCA-2</option>
+            <option value="repsol">Repsol</option>
+          </select>
+        </div>
+      </div>
+
+    <div class="field" id="cartaoFrotaField" style="display:none;">
+        <span class="field-label label-medium">Cartão Frota</span>
+        <div class="md-filled-field">
+          <select aria-label="cartao-frota">
+            <option value="" selected disabled>Selecionar cartão</option>
+            <option value="cartao1">1111111</option>
+            <option value="cartao2">222222</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Data (current datetime, read‑only) -->
+      <div class="field">
+        <span class="field-label label-medium">Data</span>
+        <div class="md-filled-field">
+          <input id="dataField" type="datetime-local" readonly aria-label="Data atual" />
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Nº (combo) -->
+      <div class="field">
+        <span class="field-label label-medium">Nº Obra</span>
+        <div class="md-filled-field">
+          <select aria-label="Número interno">
+            <option value="" selected disabled>Selecionar número</option>
+            <option value="484">484</option>
+            <option value="485">485</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Km (combo) -->
+      <div class="field" id="kmField" style="display: none;">
+        <span class="field-label label-medium">Km</span>
+        <div class="md-filled-field">
+          <input id="kmsInput" min="0" step="" placeholder="0,0" aria-label="Kms" />
+        </div>
+      </div>
+
+      <!-- Horas (number input) -->
+      <div class="field" id="horasField" style="display: none;">
+        <span class="field-label label-medium">Horas</span>
+        <div class="md-filled-field">
+          <input id="horasInput" min="0" step="" placeholder="0,0" aria-label="Horas de trabalho" />
+        </div>
+      </div>
+
+      <!-- O requisitante (combo) -->
+      <div class="field">
+        <span class="field-label label-medium">O requisitante</span>
+        <div class="md-filled-field">
+          <select aria-label="Requisitante">
+            <option value="" selected disabled>Selecionar colaborador</option>
+            <option value="lsilva">L. Silva</option>
+            <option value="msousa">M. Sousa</option>
+            <option value="outro">Outro…</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Combustível -->
+    <div class="grid-2">
+      <div class="combustivel-card" aria-label="Registo de combustível">
+        <div class="combustivel-header">
+          <span>Tipo de combustível</span>
+          <span>Litros</span>
+          <span>Cliente interno</span>
+        </div>
+
+        <!-- Row 1 -->
+        <div class="combustivel-row">
+          <div class="field">
+            <div class="md-filled-field">
+              <select aria-label="Tipo de combustível, linha 1">
+                <option value="" selected disabled>Selecionar tipo</option>
+                <option value="gasoleo">Gasóleo</option>
+                <option value="gasolina95">Gasolina 95</option>
+                <option value="adblue">AdBlue</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <div class="md-filled-field">
+              <input type="number" min="0" step="0.01" placeholder="0,00" aria-label="Litros de combustível, linha 1" />
+            </div>
+          </div>
+          <div class="field">
+            <div class="md-filled-field">
+              <select aria-label="Cliente interno, linha 1">
+                <option value="" selected disabled>Selecionar cliente</option>
+                <option value="a91">A91</option>
+                <option value="a92">A92</option>
+                <option value="outro">Outro…</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="combustivel-row">
+          <div class="field">
+            <div class="md-filled-field">
+              <select aria-label="Tipo de combustível, linha 2">
+                <option value="" selected disabled>Adicionar novo</option>
+                <option value="gasoleo">Gasóleo</option>
+                <option value="gasolina95">Gasolina 95</option>
+                <option value="adblue">AdBlue</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <div class="md-filled-field">
+              <input type="number" min="0" step="0.01" placeholder="0,00" aria-label="Litros de combustível, linha 2" />
+            </div>
+          </div>
+          <div class="field">
+            <div class="md-filled-field">
+              <select aria-label="Cliente interno, linha 2">
+                <option value="" selected disabled>Selecionar cliente</option>
+                <option value="a91">A91</option>
+                <option value="a92">A92</option>
+                <option value="outro">Outro…</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Observações -->
+      <div class="field">
+        <span class="field-label label-medium">Observações / Assinatura</span>
+        <div class="md-filled-field observacoes-field">
+          <textarea
+            aria-label="Observações"
+            placeholder="Adicionar notas ou assinatura digital…">
+          </textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="md-button">Cancelar</button>
+      <button type="submit" class="md-button">Submeter</button>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    const tipoRadios = document.querySelectorAll('input[name="tipo"]');
+    const veiculoField = document.getElementById('veiculoField');
+    const maquinaField = document.getElementById('maquinaField');
+    const depositoField = document.getElementById('depositoField');
+    const veiculoSelect = document.getElementById('veiculoSelect');
+    const maquinaSelect = document.getElementById('maquinaSelect');
+    const depositoSelect = document.getElementById('depositoSelect');
+    const dataField = document.getElementById('dataField');
+    const cartaoFrotaField = document.getElementById('cartaoFrotaField');
+    const localField = document.getElementById('localField');
+    const kmField = document.getElementById('kmField');
+    const horasField = document.getElementById('horasField');
+    const kmsInput = document.getElementById('kmsInput');
+    const horasInput = document.getElementById('horasInput');
+
+    // Set current datetime for "Data"
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    dataField.value = [
+      now.getFullYear(),
+      pad(now.getMonth() + 1),
+      pad(now.getDate())
+    ].join("-") + "T" + pad(now.getHours()) + ":" + pad(now.getMinutes());
+
+    // Toggle fields based on tipo (Veículo hides Máquina, and vice‑versa)
+    function updateTipo() {
+      const selected = document.querySelector('input[name="tipo"]:checked')?.value;
+      if (selected === 'veiculo') {
+        veiculoField.style.display = 'block';
+        maquinaField.style.display = 'none';
+        maquinaSelect.value = "";
+            depositoField.style.display = 'none';
+            depositoSelect.value = "";
+            kmField.style.display = 'block';
+            horasField.style.display = 'none';
+            horasInput.value = "";
+            kmField.value = "";
+            
+      } else if (selected === 'maquina') {
+        veiculoField.style.display = 'none';
+        maquinaField.style.display = 'block';
+        veiculoSelect.value = "";
+        depositoField.style.display = 'none';
+        depositoSelect.value = "";
+        kmField.style.display = 'none';
+        horasField.style.display = 'block';
+        horasInput.value = "";
+        kmField.value = "";
+      } else if (selected === 'deposito') {
+        veiculoField.style.display = 'none';
+        maquinaField.style.display = 'none';
+        depositoField.style.display = 'block';
+        veiculoSelect.value = "";
+        maquinaSelect.value = "";
+        kmField.style.display = 'none';
+        horasField.style.display = 'none';
+      }
+    }
+
+    function updateCartaoFrota() {
+      const localValue = localField.querySelector('select').value;
+      if (localValue === 'repsol') {
+        cartaoFrotaField.style.display = 'block';
+      } else {
+        cartaoFrotaField.style.display = 'none';
+        document.getElementById('cartaoSelect').value = "";
+      }
+    }
+
+    tipoRadios.forEach(r => r.addEventListener('change', updateTipo));
+    updateTipo(); // initial state
+
+    localField.addEventListener('change', updateCartaoFrota);
+    updateCartaoFrota(); // initial state
+  })();
+</script>
+</body>
+</html>
