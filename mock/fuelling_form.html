@@ -497,7 +497,7 @@
       <div class="field">
         <span class="field-label label-medium">O requisitante</span>
         <div class="md-filled-field">
-          <select aria-label="Requisitante">
+          <select id="requisitanteSelect" aria-label="Requisitante" disabled>
             <option value="" selected disabled>Selecionar colaborador</option>
             <option value="lsilva">L. Silva</option>
             <option value="msousa">M. Sousa</option>
@@ -596,6 +596,7 @@
 
 <script>
   (function () {
+    document.getElementById('requisitanteSelect').value = "lsilva"; // Set default requisitante
     const tipoRadios = document.querySelectorAll('input[name="tipo"]');
     const veiculoField = document.getElementById('veiculoField');
     const maquinaField = document.getElementById('maquinaField');
