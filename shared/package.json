@@ -1,0 +1,13 @@
+{
+  "name": "@olimeeter/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "types/models.ts",
+  "types": "types/models.ts",
+  "exports": {
+    "./types/models": "./types/models.ts",
+    "./types/api": "./types/api.ts",
+    "./constants/mqtt-topics": "./constants/mqtt-topics.ts"
+  }
+}

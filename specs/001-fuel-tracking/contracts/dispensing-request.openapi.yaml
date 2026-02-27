@@ -1,0 +1,166 @@
+openapi: 3.0.0
+info:
+  title: Fuel Dispensing API - Dispensing Request Endpoint
+  version: 1.0.0
+  description: User requests fuel dispensing; backend approves/rejects based on quota
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://api.olimeeter.com/api/v1
+    description: Production
+
+paths:
+  /dispensing-requests:
+    post:
+      summary: Request fuel dispensing
+      operationId: createDispensingRequest
+      tags:
+        - Dispensing
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - device_id
+                - requested_liters
+              properties:
+                device_id:
+                  type: string
+                  format: uuid
+                  example: "dev-pump-001"
+                  description: Which device to dispense from
+                requested_liters:
+                  type: number
+                  format: decimal
+                  minimum: 0.01
+                  maximum: 10000
+                  example: 25.5
+                  description: How many liters requested
+                destination:
+                  type: string
+                  maxLength: 100
+                  example: "Storage Tank A"
+                  description: Optional destination label
+
+      responses:
+        '201':
+          description: Request approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    example: "req-abc-123"
+                  status:
+                    type: string
+                    enum: [approved, pending]
+                  approved_liters:
+                    type: number
+                    format: decimal
+                    example: 25.5
+                  created_at:
+                    type: string
+                    format: date-time
+
+        '400':
+          description: Request rejected (quota exceeded or invalid input)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [rejected]
+                  reason:
+                    type: string
+                    enum: [quota_exceeded, device_offline, invalid_request]
+                    example: "quota_exceeded"
+                  approved_liters:
+                    type: number
+                    format: decimal
+                    example: 0
+                  message:
+                    type: string
+
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (user lacks permission)
+
+    get:
+      summary: List user's recent dispensing requests
+      operationId: getDispensingRequests
+      tags:
+        - Dispensing
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DispensingRequest'
+
+components:
+  schemas:
+    DispensingRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        requested_liters:
+          type: number
+          format: decimal
+        approved_liters:
+          type: number
+          format: decimal
+        status:
+          type: string
+          enum: [pending, approved, rejected, dispensing, completed]
+        rejection_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

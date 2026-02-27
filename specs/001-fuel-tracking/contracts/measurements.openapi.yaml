@@ -1,0 +1,191 @@
+openapi: 3.0.0
+info:
+  title: Fuel Dispensing API - Measurements Endpoint
+  version: 1.0.0
+  description: ESP32 uploads fuel measurements; accepts WiFi or BLE-proxied submissions
+
+servers:
+  - url: http://localhost:8080/api/v1
+  - url: https://api.olimeeter.com/api/v1
+
+paths:
+  /measurements:
+    post:
+      summary: Record fuel measurement (WiFi direct or BLE-proxied)
+      operationId: recordMeasurement
+      tags:
+        - Measurements
+      security:
+        - deviceAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: Device-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ESP32 device identifier
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID idempotency key (prevents duplicate records)
+        - name: X-Checksum
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-f0-9]{64}$'
+          description: SHA-256 checksum of payload
+        - name: Communication-Channel
+          in: header
+          schema:
+            type: string
+            enum: [wifi, ble-proxied]
+            default: wifi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - volume_liters
+                - timestamp
+                - dispensing_request_id
+              properties:
+                volume_liters:
+                  type: number
+                  format: decimal
+                  minimum: 0
+                  example: 5.2
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2026-02-27T14:32:22Z"
+                dispensing_request_id:
+                  type: string
+                  format: uuid
+                  example: "req-abc-123"
+                battery_percent:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  nullable: true
+                signal_strength_dbm:
+                  type: integer
+                  minimum: -120
+                  maximum: -20
+                  nullable: true
+
+      responses:
+        '201':
+          description: Measurement recorded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [recorded]
+                  created_at:
+                    type: string
+                    format: date-time
+
+        '202':
+          description: Duplicate (same idempotency key already processed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [already_processed]
+                  original_record_id:
+                    type: string
+                    format: uuid
+
+        '400':
+          description: Bad request (invalid checksum, old timestamp, etc.)
+        '401':
+          description: Unauthorized (invalid Device-ID or JWT)
+        '409':
+          description: Conflict (different data with same idempotency key)
+
+  /measurements/{id}:
+    get:
+      summary: Retrieve a specific measurement record
+      operationId: getMeasurement
+      tags:
+        - Measurements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Measurement found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeasurementRecord'
+        '404':
+          description: Not found
+
+components:
+  schemas:
+    MeasurementRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+        volume_liters:
+          type: number
+          format: decimal
+        measurement_timestamp:
+          type: string
+          format: date-time
+        backend_received_at:
+          type: string
+          format: date-time
+        communication_channel:
+          type: string
+          enum: [wifi, ble-proxied]
+        checksum:
+          type: string
+        idempotency_key:
+          type: string
+          format: uuid
+        metadata_json:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+  securitySchemes:
+    deviceAuth:
+      type: apiKey
+      name: Device-ID
+      in: header
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
