@@ -7,19 +7,30 @@
 
 ## User Scenarios & Testing
 
+### Clarifications - Session 2026-02-24
+
+- Q1: Max liters determination → A: Flexible by user, role, monthly limit, daily limit, or custom rule
+- Q2: Limit enforcement when quota exceeded → A: Request manager/admin override via separate workflow (not in dispensing request flow)
+- Q3: Dispensing request response structure → A: Simple `{status, max_liters}`; override is separate feature
+- Q4: Max liters representation → A: Show remaining balance from current quota, not full limit
+
+---
+
 ### User Story 1 - Authorized User Requests Fuel Dispensing (Priority: P1)
 
-An authorized user requests permission to dispense fuel from a measuring device. They provide the intended destination for the fuel. Upon approval, the meter becomes ready to dispense and track the amount taken.
+An authorized user requests permission to dispense fuel from a measuring device. They provide the intended destination for the fuel. Upon approval, the system responds with approval/rejection status and the maximum liters available for dispensing based on the user's limits (role-based, monthly, daily, or custom rules). A manager/admin override workflow is available as a separate feature if the user has reached their limit.
 
 **Why this priority**: This is the entry point for the entire feature. Without the ability to request and authorize dispensing, no fuel can be tracked. This is the foundation of the system.
 
-**Independent Test**: Can be fully tested by having an authorized user submit a dispensing request with destination information and receiving confirmation that the request is recorded in the system, independent of the actual measurement happening.
+**Independent Test**: Can be fully tested by having an authorized user submit a dispensing request with destination information and receiving confirmation that the request is recorded with approval status and max_liters available, independent of the actual measurement happening.
 
 **Acceptance Scenarios**:
 
-1. **Given** an authorized user is logged into the system, **When** they submit a fuel dispensing request with a destination, **Then** the request is recorded with timestamp and user ID
-2. **Given** a dispensing request is received, **When** the backend validates the user authorization, **Then** the request is either approved or rejected based on user permissions
-3. **Given** an approved dispensing request, **When** the user initiates dispensing at the physical device, **Then** the IoT device begins measuring and tracking the fuel amount
+1. **Given** an authorized user is logged into the system, **When** they submit a fuel dispensing request with a destination, **Then** the request is recorded with timestamp, user ID, and returned with status and max_liters available
+2. **Given** a dispensing request is received, **When** the backend validates the user authorization and checks applicable limits, **Then** the response includes: `{status: "approved", max_liters: <remaining_balance>}` or `{status: "rejected", reason: "<reason>"}`
+3. **Given** a user has remaining quota available, **When** they receive approval, **Then** max_liters reflects the remaining balance (not the full limit) from current quota period (daily/monthly/custom)
+4. **Given** a user has reached or exceeded their limit, **When** they request dispensing, **Then** the response is `{status: "rejected", reason: "limit_exceeded"}` and the system notes that an override workflow is available separately
+5. **Given** an approved dispensing request, **When** the user initiates dispensing at the physical device, **Then** the IoT device begins measuring and tracking the fuel amount up to the max_liters limit
 
 ---
 
@@ -97,6 +108,9 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - What happens if the meter sensor provides physically impossible values (negative volume)? (Should validate and reject)
 - What if a dispensing request is approved but the user never actually dispenses fuel? (Request should eventually expire, define timeout period)
 - What if two different devices try to send measurements for the same request simultaneously? (Idempotency key prevents duplicates)
+- What if a user's quota limit changes during an active dispensing session? (Enforce at request time; in-flight dispensing continues with approved max_liters)
+- What if a user tries to dispense more than max_liters after receiving approval? (Stop dispensing at max_liters limit, record actual amount dispensed)
+- What if user has multiple overlapping quota rules (role-based AND user-specific)? (Apply most restrictive rule)
 
 ## Requirements
 
@@ -119,13 +133,21 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - **FR-015**: System MUST allow administrators to view all dispensing records across all users and devices
 - **FR-016**: System MUST validate that dispensed volume is physically realistic (positive, within device capacity)
 - **FR-017**: System MUST log all validation failures and rejection reasons for troubleshooting
+- **FR-018**: System MUST support configurable quota limit rules by user, role, daily, monthly, or custom criteria
+- **FR-019**: System MUST calculate remaining balance for each user based on applicable limit rules and current quota usage
+- **FR-020**: System MUST return dispensing request response with simple structure: `{status: "approved"|"rejected", max_liters: <remaining_balance>}` or `{status: "rejected", reason: "<reason>"}`
+- **FR-021**: System MUST ensure max_liters in response reflects remaining balance from current quota period, not the full limit
+- **FR-022**: System MUST reject dispensing requests with `status: "rejected", reason: "limit_exceeded"` when user quota is exhausted, with note that override workflow is available separately
+- **FR-023**: System MUST enforce dispensing volume does not exceed max_liters approved in the dispensing request
+- **FR-024**: System MUST prevent dispensing beyond remaining quota; if user attempts to dispense more than max_liters, stop at max_liters limit
 
 ### Key Entities
 
-- **Dispensing Request**: Represents a user's request to dispense fuel, includes user ID, destination (free text), timestamp, authorization status, and expiration time
-- **Dispensing Record**: Immutable ledger entry for completed fuel dispensing, includes volume (liters), device ID, measurement timestamp, authorized user ID, request destination, and system receipt timestamp
+- **Dispensing Request**: Represents a user's request to dispense fuel, includes user ID, destination (free text), timestamp, authorization status, expiration time, max_liters (remaining balance from applicable quota), and applicable limit type (role, user, daily, monthly, or custom)
+- **Dispensing Record**: Immutable ledger entry for completed fuel dispensing, includes volume (liters), device ID, measurement timestamp, authorized user ID, request destination, max_liters approved, and system receipt timestamp
 - **Measuring Device**: Represents a physical ESP32-based meter device, includes device ID, location, calibration info, and last communication timestamp
-- **User**: Represents an authorized system user with permission levels (regular user, administrator)
+- **User**: Represents an authorized system user with permission levels (regular user, administrator), assigned quota limits (daily/monthly/custom rules), and role-based limits
+- **Quota Limit Rule**: Configurable rule defining maximum liters available, includes type (user-specific, role-based, daily, monthly, custom), limit value (liters), and period (if applicable)
 
 ## Success Criteria
 
@@ -141,6 +163,9 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - **SC-008**: Timestamp accuracy: ±2 second precision across ESP32 device and backend server
 - **SC-009**: All dispensing records include complete audit trail enabling data recovery if corruption occurs
 - **SC-010**: 95% of authorized users successfully complete dispensing request and dispense fuel on first attempt
+- **SC-011**: Quota limit enforcement: 100% of dispensing requests respect configured limits; zero requests bypass established quotas
+- **SC-012**: Max liters accuracy: Response includes correct remaining balance with 100% accuracy based on current usage and applicable rules
+- **SC-013**: Limit rejection clarity: Users receive clear feedback when quota exceeded, with indication that override workflow exists
 
 ## Assumptions
 
@@ -153,6 +178,11 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - All timestamps use UTC for consistency across distributed devices
 - Dispensing requests expire after 24 hours if no measurement is received
 - PostgreSQL is available for persistent storage with transactional support
+- Quota limit rules can be configured by administrators at multiple levels (user, role, daily, monthly, custom)
+- Remaining balance calculation includes all current usage (today/this month/current period depending on rule type)
+- Manager/admin override workflow is a separate feature to be defined later (outside scope of this MVP)
+- Users who reach quota limits must submit a new dispensing request after obtaining override approval
+- Most restrictive applicable rule is enforced when multiple overlapping quotas apply to a user
 
 ## Out of Scope
 
@@ -162,3 +192,4 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - Integration with fuel inventory management systems
 - Email notifications (can be added in future iterations)
 - Geographic location tracking of dispensing events beyond user-provided destination
+- Manager/admin override workflow for quota limit exceptions (separate feature, defined later)
