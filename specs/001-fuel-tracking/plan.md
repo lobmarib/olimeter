@@ -5,17 +5,30 @@
 
 ## Summary
 
-Build a comprehensive fuel/oil dispensing tracking system with IoT integration. ESP32 devices measure fuel volume through relay-controlled pumps, transmit data via REST API to backend, and support MQTT for Home Assistant compatibility. System enforces flexible quota management (user/role/daily/monthly), provides immutable audit trails, and ensures zero data loss through offline queueing and checksums. Architecture: REST API backend (Spring Boot 4.0.1/Java 25) + Web UI (React 19.2.4) + Mobile app (React Native) + IoT firmware (ESP32/PlatformIO with OTA updates).
+Build a comprehensive fuel/oil dispensing tracking system with IoT integration. ESP32 devices measure fuel volume through relay-controlled pumps with multi-channel communication: REST API (primary WiFi-based sync) + MQTT (Home Assistant) + BLE fallback (via mobile app bridge when WiFi unavailable). System enforces flexible quota management (user/role/daily/monthly), provides immutable audit trails, and ensures zero data loss through offline queueing and checksums. WiFi configuration is user-friendly (OTA-updateable, supports multiple predefined SSIDs). Architecture: REST API backend (Spring Boot 4.0.1/Java 25) + Web UI (React 19.2.4) + Mobile app (React Native with BLE service) + IoT firmware (ESP32/PlatformIO with OTA + BLE + WiFi provisioning).
 
 ## Technical Context
 
 **ESP32 Firmware**:
 - Language/Version: C/C++ with Arduino framework via PlatformIO framework
-- Primary Dependencies: PlatformIO, Arduino-esp32, ArduinoJson, WiFiClientSecure (REST), PubSubClient (MQTT)
-- Communication: REST API (primary backend sync) + MQTT (Home Assistant compatibility)
-- Firmware Updates: Over-The-Air (OTA) with versioning
-- Storage: Local SPIFFS/LittleFS for offline queueing (7-day retention)
-- Testing: Unit tests via PlatformIO, hardware simulation
+- Primary Dependencies: PlatformIO, Arduino-esp32, ArduinoJson, WiFiClientSecure (REST), PubSubClient (MQTT), esp_ble_mesh or NimBLE (BLE)
+- Communication Layers (priority order):
+  1. WiFi (primary): REST API + MQTT over WiFi for backend sync
+  2. BLE (fallback): Bluetooth Low Energy for mobile app bridge when WiFi unavailable
+  3. Mobile app acts as bridge: receives data via BLE → transmits to backend via REST → receives response → sends back via BLE
+- WiFi Management:
+  - OTA-updateable SSID configuration (stored in NVRAM with multiple profiles)
+  - Support for predefined WiFi SSIDs list (configured at compile-time or via OTA)
+  - Automatic WiFi selection/fallback to next SSID on connection failure
+  - Visual/audio feedback on WiFi connection status
+- Firmware Updates: Over-The-Air (OTA) with versioning (WiFi-based primary, BLE-based optional fallback)
+- BLE Configuration:
+  - ESP32 acts as BLE peripheral (mobile phones connect as central)
+  - BLE GATT services for: proximity check, measurement data, relay control commands
+  - Low power BLE during WiFi connection loss (dynamic power switching)
+  - BLE advertisement with device ID and connection strength indicators
+- Storage: Local SPIFFS/LittleFS for offline queueing (7-day retention) + NVRAM for WiFi/BLE settings
+- Testing: Unit tests via PlatformIO, hardware simulation, BLE simulator on mobile
 
 **Backend**:
 - Language/Version: Java 25 with Spring Boot 4.0.1
@@ -38,11 +51,28 @@ Build a comprehensive fuel/oil dispensing tracking system with IoT integration. 
 
 **Mobile App**:
 - Language/Version: TypeScript/JavaScript with React Native
-- Primary Dependencies: React Native 0.76+, React Navigation, native modules for auth
-- Testing: Jest, detox for E2E
-- Target Platform: iOS 13+, Android 8+
-- Performance Goals: <3 second app startup, offline capability
-- Scale: 500+ users
+- Primary Dependencies: React Native 0.76+, React Navigation, react-native-ble-plx (iOS) / react-native-ble-adapter (Android), native modules for auth
+- Communication Bridges:
+  - REST API client for backend sync (primary when mobile has WiFi)
+  - BLE Central role to communicate with ESP32 devices (when WiFi unavailable)
+  - Automatic fallback: if WiFi fails, detect nearby ESP32 via BLE scan, establish connection
+  - BLE proxy service: proxies ESP32 measurement data & relay commands through mobile to backend
+- BLE Capabilities:
+  - Background BLE scanning (configurable for power efficiency)
+  - BLE GATT client for connecting to ESP32 peripherals
+  - Handle BLE connection/disconnection events with user notifications
+  - Transmit user's dispensing requests via BLE to ESP32
+  - Receive relay activation status & measurement confirmations via BLE
+  - Background BLE service for offline measurement queueing
+- WiFi/BLE Fallback Logic:
+  - Check mobile WiFi connection → if available, use REST API
+  - If no mobile WiFi, scan for nearby ESP32 devices via BLE UUID
+  - Connect to target device, exchange data (measurement/control commands)
+  - Cache data locally if connection drops, retry with exponential backoff
+- Testing: Jest, detox for E2E, BLE simulator libraries for unit tests
+- Target Platform: iOS 13+ (Core Bluetooth Framework), Android 8+ (Bluetooth API + permissions)
+- Performance Goals: <3 second app startup, BLE scan response <500ms, data transmission latency <2s
+- Scale: 500+ users, proximity-based ESP32 discovery
 
 **Project Type**: Multi-platform (IoT firmware + backend + web frontend + mobile app)
 
@@ -76,11 +106,14 @@ Build a comprehensive fuel/oil dispensing tracking system with IoT integration. 
 - Standard component libraries (Ant Design, React Navigation)
 - Deferred: override workflows, admin dashboards (P2/P3 features)
 
-**Principle VI - Hardware-Backend Synchronization**: ✅ PASS (CRITICAL)
-- ESP32 sends measurements via REST API (primary)
-- Backend can send activation/revoke commands to ESP32
-- Offline fallback: ESP32 caches latest approval for relay activation
-- MQTT topic for Home Assistant: `home_assistant/fueling/device/{device_id}/*`
+**Principle VI - Hardware-Backend Synchronization**: ✅ PASS (CRITICAL & ENHANCED)
+- Primary: ESP32 sends measurements via REST API over WiFi (standard REST + MQTT)
+- Fallback: ESP32 uses BLE to connect to nearby mobile, mobile proxies to backend via REST
+- Configuration: WiFi SSID profiles stored in NVRAM, updatable via OTA
+- Backend can send activation/revoke commands to ESP32 (WiFi) or via mobile BLE bridge
+- Offline fallback: ESP32 caches latest approval for relay activation (WiFi unavailable)
+- BLE-proxied measurements include idempotency keys + checksums for integrity
+- MQTT topic for Home Assistant: `home_assistant/fueling/device/{device_id}/*` (WiFi primary)
 
 **Principle VII - Data Resilience & Integrity**: ✅ PASS (CRITICAL)
 - SHA-256 checksums for measurement validation
@@ -254,37 +287,67 @@ shared/                            # Optional: Shared types/utilities
    - Memory constraints and optimization techniques
    - WiFi reconnection handling in embedded systems
 
-2. **REST API ↔ ESP32 Integration**
+2. **ESP32 WiFi Configuration & Management**
+   - NVRAM storage patterns for WiFi profiles (predefined SSIDs)
+   - OTA-updateable WiFi configuration (compile-time vs runtime)
+   - WiFi fallback logic (automatic retry with multiple SSIDs)
+   - Power management during WiFi connection loss
+   - Visual/audio feedback indicators for connection status
+
+3. **BLE Implementation on ESP32 (NimBLE vs esp_ble_mesh)**
+   - BLE peripheral mode (GATT services & characteristics) for measurement data
+   - BLE advertisement protocol with UUID discovery
+   - BLE connection management (pairing, bonding, security)
+   - Memory footprint & power consumption tradeoffs
+   - BLE range limitations and performance in real-world environments
+
+4. **Mobile App BLE Integration (React Native)**
+   - react-native-ble-plx (iOS via Core Bluetooth)
+   - react-native-ble-adapter (Android via Bluetooth API)
+   - Cross-platform BLE permission handling (iOS vs Android differences)
+   - Background BLE scanning and connection state management
+   - BLE GATT client operations (read/write characteristics)
+
+5. **REST API ↔ ESP32 Integration (WiFi Primary)**
    - SSL/TLS certificate pinning on embedded devices
    - Exponential backoff retry strategies
    - Idempotency key implementation in embedded context
    - Payload size optimization (bandwidth constraints)
 
-3. **MQTT for Home Assistant**
+6. **BLE-to-Backend Proxy Pattern (Mobile Bridge)**
+   - Mobile app receiving BLE data and proxying to REST backend
+   - Relay control commands flowing through mobile (ESP32 ← BLE ← Mobile ← REST ← Backend)
+   - Measurement data flowing through mobile (ESP32 → BLE → Mobile → REST → Backend)
+   - Handling mobile WiFi unavailability during proxy operation (queue locally)
+   - Security implications of proxying (authentication delegation)
+
+7. **MQTT for Home Assistant**
    - Home Assistant MQTT discovery protocol
    - Topic naming conventions for fuel tracking domain
    - QoS levels (0, 1, 2) and persistence trade-offs
    - Shared message structure between REST and MQTT events
 
-4. **Spring Boot 4.0.1 with Java 25**
+8. **Spring Boot 4.0.1 with Java 25**
    - Virtual threads for concurrent connections (Project Loom)
    - Spring Security 6.x authentication/authorization patterns
    - Spring Data JPA best practices for large datasets
+   - Handling BLE-proxied requests (trust chain from mobile app)
 
-5. **PostgreSQL 15+ Data Integrity**
+9. **PostgreSQL 15+ Data Integrity**
    - Immutable ledger table design patterns
-   - JSONB support for semi-structured quota rules
+   - JSONB support for semi-structured WiFi/BLE config
    - Transaction isolation levels for concurrent dispensing
 
-6. **React + Ant Design Offline Architecture**
-   - IndexedDB schema design for dispensing history
-   - Sync patterns with backend REST API
-   - Conflict resolution strategies
+10. **React + Ant Design Offline Architecture**
+    - IndexedDB schema design for dispensing history
+    - Sync patterns with backend REST API
+    - Conflict resolution strategies
 
-7. **React Native + Home Assistant Integration**
-   - MQTT client libraries for React Native
-   - Secure token storage (native Keychain/Keystore)
-   - Platform-specific background task handling
+11. **React Native + Home Assistant Integration**
+    - MQTT client libraries (if direct MQTT support needed for mobile)
+    - Secure token storage (native Keychain/Keystore)
+    - Platform-specific background task handling (iOS vs Android)
+    - BLE background modes (iOS/Android capability differences)
 
 **Deliverable**: `research.md` with decision rationale for each unknown
 
@@ -306,6 +369,8 @@ Key entities from spec (to be expanded with field details, validation rules, sta
 - **User** (authorization context, quota assignments)
 - **Quota Limit Rule** (flexible quota configuration)
 - **Device Audit Trail** (ESP32 activation/deactivation events)
+- **WiFi Configuration** (SSID profiles, OTA-updateable credentials per device)
+- **BLE Session** (proxied communication logs from mobile bridge)
 
 ### 1.2 API Contracts
 
@@ -319,7 +384,7 @@ Priority contracts (in order of implementation):
 
 2. **Measurement API** (`dispensing-record.openapi.yaml`)
    - POST `/api/v1/measurements` (ESP32 uploads measurement)
-   - Headers: `Device-ID`, `Idempotency-Key`, `X-Checksum` (SHA-256)
+   - Headers: `Device-ID`, `Idempotency-Key`, `X-Checksum` (SHA-256), `Communication-Channel` (wifi|ble-proxied)
    - Payload: `{device_id, volume_liters, timestamp, dispensing_request_id}`
 
 3. **Device Relay Control API** (`device-control.openapi.yaml`)
@@ -327,31 +392,51 @@ Priority contracts (in order of implementation):
    - POST `/api/v1/devices/{device_id}/relay/deactivate` (backend sends stop signal)
    - Response: `{status: "success"|"offline_queued", timestamp}`
 
-4. **MQTT Events Schema** (`mqtt-events.schema.json`)
+4. **WiFi Configuration API** (`wifi-config.openapi.yaml`) - NEW
+   - GET `/api/v1/devices/{device_id}/wifi-config` (retrieve current SSID profiles)
+   - PUT `/api/v1/devices/{device_id}/wifi-config` (update WiFi profiles)
+   - Payload: `{ssid_profiles: [{ssid: string, password: string, priority: int}], update_via_ota: boolean}`
+   - Response: `{status: "queued_for_ota"|"applied", affected_devices: int}`
+
+5. **BLE Proxy API** (`ble-proxy.openapi.yaml`) - NEW
+   - POST `/api/v1/ble-proxy/measurements` (mobile app proxies ESP32 measurements)
+   - Headers: `Mobile-User-ID`, `ESP32-Device-ID`, `Idempotency-Key`, `X-Checksum`
+   - Payload: `{measurements: [{volume_liters, timestamp, ...}], relayed_at: timestamp}`
+   - POST `/api/v1/ble-proxy/relay-commands` (backend sends commands via mobile)
+   - Response: `{commands_queued: int, delivery_status: "pending"|"delivered"}`
+
+6. **MQTT Events Schema** (`mqtt-events.schema.json`)
    - Topic: `home_assistant/fueling/device/{device_id}/measurement` (measurement published)
    - Topic: `home_assistant/fueling/device/{device_id}/relay/{action}` (relay state changed)
-   - Payload: JSON with timestamp, volume, device metadata
+   - Topic: `home_assistant/fueling/device/{device_id}/connectivity` (wifi/ble status)
+   - Payload: JSON with timestamp, volume, device metadata, channel (wifi|ble)
 
-5. **History Query API** (`history.openapi.yaml`)
+7. **History Query API** (`history.openapi.yaml`)
    - GET `/api/v1/users/{user_id}/dispensing-history` (user views their history)
    - Query params: `?start_date=`, `?end_date=`, `?limit=`, `?offset=`
 
-6. **Admin Dashboard API** (`admin.openapi.yaml`)
+8. **Admin Dashboard API** (`admin.openapi.yaml`)
    - GET `/api/v1/admin/dispensing-summary` (aggregated statistics)
-   - GET `/api/v1/admin/devices` (all device status)
+   - GET `/api/v1/admin/devices` (all device status including connectivity: wifi/ble/offline)
 
 ### 1.3 Local Development Setup
 
 **Deliverable**: `quickstart.md` with step-by-step local dev environment
 
 Quickstart will include:
-- Prerequisites: Docker, VSCode extensions, Java 25, Node.js LTS, PlatformIO CLI
-- Services: PostgreSQL container, MQTT broker (Mosquitto), optional reverse proxy (Nginx)
+- Prerequisites: Docker, VSCode extensions, Java 25, Node.js LTS, PlatformIO CLI, ESP32 simulator
+- Services: PostgreSQL container, MQTT broker (Mosquitto), Bluetooth simulator for testing
 - Database initialization: Flyway migrations
 - Frontend dev server: Vite with hot reload
-- Backend dev server: Gradle bootRun
-- ESP32 emulation: PlatformIO simulator (if available) or QEMU
-- MQTT subscriber for testing: mosquitto_sub CLI examples
+- Backend dev server: Gradle bootRun (with BLE proxy endpoints)
+- ESP32 emulation: PlatformIO simulator or physical ESP32 dev board via USB
+- WiFi configuration setup: Mock WiFi profiles in NVRAM simulator
+- BLE testing:
+  - ESP32 BLE peripheral simulator (advertising measurement service)
+  - React Native BLE client test harness (connecting as central)
+  - BLE data exchange simulation (measurement → mobile → backend)
+  - Mobile WiFi failover testing (WiFi on/off toggles)
+- MQTT subscriber for testing: mosquitto_sub CLI examples for connectivity topics
 
 ### 1.4 Agent Context Update
 
@@ -363,11 +448,12 @@ Run after design complete:
 ```
 
 This script will add:
-- Technology stack summary (ESP32/PlatformIO, Spring Boot, React, React Native)
-- API contract locations
-- Database schema reference
-- MQTT topic mapping
-- Architecture decisions rationale
+- Technology stack summary (ESP32/PlatformIO with BLE, Spring Boot, React, React Native)
+- API contract locations (including new WiFi config & BLE proxy endpoints)
+- Database schema reference (including WiFi Configuration & BLE Session entities)
+- MQTT topic mapping (including connectivity topics for WiFi/BLE status)
+- Architecture decisions rationale (multi-channel communication strategy)
+- BLE/WiFi fallback strategy diagram (primary WiFi → fallback BLE bridge)
 
 ---
 
@@ -382,14 +468,22 @@ This script will add:
 
 ## Implementation Priority
 
-Per user specification, execution order prioritizes OTA capability and ESP32 robustness:
+Per user specification, execution order prioritizes OTA capability, multi-channel WiFi/BLE communication, and ESP32 robustness:
 
 1. **Phase 2.0-1**: ESP32 Firmware Foundation (relay control, meter sensor, OTA)
-2. **Phase 2.0-2**: ESP32 Communication Layers (REST API client + offline queueing)
-3. **Phase 2.0-3**: ESP32 MQTT Integration (Home Assistant compatibility)
-4. **Phase 2.1**: Backend REST API (dispensing requests, measurements, quota)
-5. **Phase 2.2**: Frontend Web UI (dispensing form, history display)
-6. **Phase 2.3**: Mobile App (React Native sync)
-7. **Phase 2.4**: Admin Features (P2/P3 user stories)
+2. **Phase 2.0-2**: ESP32 WiFi Management (provisioning, SSID profiles, OTA config updates)
+3. **Phase 2.0-3**: ESP32 BLE Implementation (peripheral mode, GATT services for measurements)
+4. **Phase 2.0-4**: ESP32 Communication Layers (REST API client + BLE + offline queueing)
+5. **Phase 2.0-5**: ESP32 MQTT Integration (Home Assistant topics, connectivity status)
+6. **Phase 2.1**: Mobile App BLE Service (React Native BLE client, WiFi/BLE fallback detection)
+7. **Phase 2.1-2**: Backend BLE Proxy API (WiFi config endpoint, BLE measurement relay)
+8. **Phase 2.2**: Backend REST API (dispensing requests, measurements, quota, device management)
+9. **Phase 2.3**: Frontend Web UI (dispensing form, history display)
+10. **Phase 2.4**: Admin Features (P2/P3 user stories, device connectivity dashboard)
 
-This order ensures hardware-backend synchronization is robust before frontend complexity increases.
+**Critical Additions** (user requirements):
+- WiFi configuration must be OTA-updateable with predefined SSID profiles
+- Mobile device used for dispensing request acts as BLE bridge when WiFi unavailable
+- Mobile app transmits ESP32 data to backend via REST, receives commands, relays back via BLE
+
+This order ensures hardware-backend multi-channel synchronization is robust before frontend complexity increases.
