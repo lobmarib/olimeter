@@ -14,6 +14,13 @@
 - Q3: Dispensing request response structure → A: Simple `{status, max_liters}`; override is separate feature
 - Q4: Max liters representation → A: Show remaining balance from current quota, not full limit
 
+### Clarifications - Session 2026-02-24 (Part 2) - ESP32 Dispenser Control
+
+- Q1: ESP32 physical control mechanism → A: Relay-based control (ESP32 controls relay switch that enables/disables power to external pump/valve)
+- Q2: ESP32 receives approval signal → A: User/app triggers activation at physical device (PIN/RFID/app scan); ESP32 fetches approval from backend, then activates relay
+- Q3: Solenoid/pump activation and safety limit → A: Hard cutoff at max_liters (ESP32 automatically cuts relay power when volume reaches max_liters)
+- Q4: Dispensing request leads the process → A: User submits request → Backend approves (if quota allows) → If approved, backend signals ESP32 → Relay stays active until: (1) max_liters reached (hard cutoff), OR (2) session timeout, OR (3) user action to finish (to be defined later)
+
 ---
 
 ### User Story 1 - Authorized User Requests Fuel Dispensing (Priority: P1)
@@ -36,18 +43,20 @@ An authorized user requests permission to dispense fuel from a measuring device.
 
 ### User Story 2 - IoT Device Measures and Records Fuel Consumption (Priority: P1)
 
-The ESP32 IoT device physically measures the fuel being dispensed in real-time using the connected meter sensor. The device records the volume in liters and captures the timestamp of each measurement event.
+The ESP32 IoT device controls a relay switch connected to an external fuel pump/valve. When the user triggers activation at the physical device (after submission of approved dispensing request), the ESP32 queries the backend to fetch approval, then activates the relay to enable fuel flow. The device measures fuel volume in real-time using the meter sensor, records timestamps, and automatically cuts relay power (hard stop) when the approved max_liters limit is reached. The system also supports session timeout and manual user action to end dispensing (further details to be defined).
 
-**Why this priority**: This is critical infrastructure. Without accurate measurement from the hardware, the entire system has no data to track. This must work reliably before data can be persisted.
+**Why this priority**: This is critical infrastructure. Without accurate measurement and control at the hardware level, the system cannot prevent quota bypass or ensure safety. This must work reliably to enforce approval-only dispensing.
 
-**Independent Test**: Can be fully tested independently by having the ESP32 connected to a meter device, dispensing fuel, and verifying that measurements are recorded locally on the device with proper timestamps and volume data, even if backend communication fails.
+**Independent Test**: Can be fully tested independently by: (1) user authenticating at device with approved dispensing request, (2) verifying ESP32 activates relay and fuel begins flowing, (3) verifying measurements are recorded with proper timestamps, (4) verifying relay auto-cuts when max_liters is reached, and (5) verifying offline queueing works if backend unavailable.
 
 **Acceptance Scenarios**:
 
-1. **Given** an ESP32 device with an active dispensing session, **When** fuel flows through the connected meter sensor, **Then** the device captures the volume in liters with high accuracy
-2. **Given** fuel is being dispensed, **When** the measurement event occurs, **Then** the device records the precise timestamp of the measurement
+1. **Given** a user has an approved dispensing request with max_liters limit, **When** they authenticate at the physical device, **Then** the ESP32 queries backend for approval and activates the relay
+2. **Given** fuel is flowing through the meter sensor, **When** the measurement event occurs, **Then** the device records the precise timestamp and volume in liters
 3. **Given** multiple fuel pulses are detected, **When** measurements accumulate, **Then** the total volume is calculated correctly
-4. **Given** network connectivity is lost during dispensing, **When** fuel continues to be measured, **Then** measurements are queued locally with timestamp and volume data intact
+4. **Given** the total volume reaches the approved max_liters, **When** the threshold is met, **Then** the ESP32 automatically cuts relay power (hard stop) with no further fuel flow
+5. **Given** network connectivity is lost during measurement, **When** fuel continues to be measured, **Then** measurements are queued locally with timestamp and volume data intact
+6. **Given** a user attempts to activate dispensing without an approved request, **When** the ESP32 queries the backend, **Then** the request is denied and relay remains off
 
 ---
 
@@ -111,6 +120,10 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - What if a user's quota limit changes during an active dispensing session? (Enforce at request time; in-flight dispensing continues with approved max_liters)
 - What if a user tries to dispense more than max_liters after receiving approval? (Stop dispensing at max_liters limit, record actual amount dispensed)
 - What if user has multiple overlapping quota rules (role-based AND user-specific)? (Apply most restrictive rule)
+- What if ESP32 backend query fails during relay activation attempt? (Use cached approval if available per offline-resilience assumption; otherwise deny activation)
+- What if relay gets stuck in ON position (hardware failure)? (User must manually intervene; backend can force off command; measure actual volume to detect anomaly)
+- What if user authenticates at device but then walks away before finishing dispensing? (Session timeout cuts relay after defined period; user must re-authenticate for next session)
+- What if backend approves dispensing but later decides to revoke during active session? (Backend sends revoke command to ESP32; ESP32 immediately cuts relay regardless of volume)
 
 ## Requirements
 
@@ -140,6 +153,14 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - **FR-022**: System MUST reject dispensing requests with `status: "rejected", reason: "limit_exceeded"` when user quota is exhausted, with note that override workflow is available separately
 - **FR-023**: System MUST enforce dispensing volume does not exceed max_liters approved in the dispensing request
 - **FR-024**: System MUST prevent dispensing beyond remaining quota; if user attempts to dispense more than max_liters, stop at max_liters limit
+- **FR-025**: ESP32 MUST control relay switch for external fuel pump/valve; relay OFF = no fuel flow, relay ON = fuel flows
+- **FR-026**: ESP32 MUST NOT activate relay until dispensing request is approved by backend and user authenticates at physical device
+- **FR-027**: ESP32 MUST query backend to fetch dispensing request approval before activating relay (real-time check with offline cached fallback)
+- **FR-028**: ESP32 MUST automatically cut relay power (hard stop) when measured volume reaches approved max_liters limit
+- **FR-029**: ESP32 MUST support session timeout mechanism to end dispensing if user does not manually stop (timeout duration to be defined)
+- **FR-030**: ESP32 MUST support manual user action to stop dispensing and cut relay power (implementation details to be defined)
+- **FR-031**: ESP32 MUST reject relay activation if backend query returns "rejected" status or user has no valid approved dispensing request
+- **FR-032**: System MUST log all relay activation/deactivation events with timestamp, user ID, device ID, and reason (approved, max_liters_reached, timeout, user_stop)
 
 ### Key Entities
 
@@ -166,6 +187,9 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - **SC-011**: Quota limit enforcement: 100% of dispensing requests respect configured limits; zero requests bypass established quotas
 - **SC-012**: Max liters accuracy: Response includes correct remaining balance with 100% accuracy based on current usage and applicable rules
 - **SC-013**: Limit rejection clarity: Users receive clear feedback when quota exceeded, with indication that override workflow exists
+- **SC-014**: Relay activation approval enforcement: 100% of relay activation attempts are validated against approved dispensing request; zero unauthorized activations occur
+- **SC-015**: Max liters hard limit enforcement: ESP32 cuts relay power within 0.5 seconds of reaching max_liters threshold (hardware safety constraint)
+- **SC-016**: Dispensing session control: System maintains relay on/off state with 100% accuracy through session lifecycle (activation → measurement → termination)
 
 ## Assumptions
 
@@ -183,6 +207,12 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - Manager/admin override workflow is a separate feature to be defined later (outside scope of this MVP)
 - Users who reach quota limits must submit a new dispensing request after obtaining override approval
 - Most restrictive applicable rule is enforced when multiple overlapping quotas apply to a user
+- ESP32 has a relay switch connected to external fuel pump/valve (hardware provided, not part of this feature)
+- User authentication at physical device will use PIN/RFID/app scan (details to be defined in separate UX spec)
+- Session timeout duration will be defined in separate operational/configuration spec (MVP default: TBD)
+- Manual user action to stop dispensing will leverage device UI/controls (details to be defined later)
+- ESP32 can cache latest dispensing approval from backend for offline activation fallback
+- Backend can send revoke/force-off commands to ESP32 to disable relay during active session
 
 ## Out of Scope
 
@@ -193,3 +223,6 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - Email notifications (can be added in future iterations)
 - Geographic location tracking of dispensing events beyond user-provided destination
 - Manager/admin override workflow for quota limit exceptions (separate feature, defined later)
+- Session timeout duration definition (to be specified in operational configuration document)
+- Physical device UI/UX for manual stop action (to be defined in separate design document)
+- PIN/RFID/app scan authentication at physical device (to be defined in separate authentication design)
