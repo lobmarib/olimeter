@@ -45,31 +45,31 @@
 
 ### Backend Foundation
 
-- [ ] T008 Configure PostgreSQL datasource and Flyway migrations framework in backend/src/main/resources/application.yaml
-- [ ] T009 Create Flyway migration V1__Create_core_schema.sql with Facility, User, MeasuringDevice tables in backend/src/main/resources/db/migration/
-- [ ] T010 Create Flyway migration V2__Create_dispensing_schema.sql with DispensingRequest, DispensingRecord (immutable), DeviceAuditTrail tables in backend/src/main/resources/db/migration/
-- [ ] T011 Create Flyway migration V3__Create_quota_and_config_schema.sql with QuotaLimitRule, WiFiConfiguration, BLESessionLog, MobileProxyPermission tables in backend/src/main/resources/db/migration/
-- [ ] T012 [P] Implement Spring Security config with JWT authentication in backend/src/main/java/com/olimeeter/fuel/config/SecurityConfig.java
-- [ ] T013 [P] Implement WebConfig (CORS, virtual threads) in backend/src/main/java/com/olimeeter/fuel/config/WebConfig.java
-- [ ] T014 [P] Create ChecksumUtil (SHA-256 validation) in backend/src/main/java/com/olimeeter/fuel/util/ChecksumUtil.java
-- [ ] T015 [P] Create IdempotencyUtil (UUID deduplication) in backend/src/main/java/com/olimeeter/fuel/util/IdempotencyUtil.java
-- [ ] T016 [P] Create base JPA entities: Facility in backend/src/main/java/com/olimeeter/fuel/models/Facility.java
-- [ ] T017 [P] Create base JPA entity: User in backend/src/main/java/com/olimeeter/fuel/models/User.java
-- [ ] T018 [P] Create base JPA entity: MeasuringDevice in backend/src/main/java/com/olimeeter/fuel/models/MeasuringDevice.java
-- [ ] T019 [P] Create base JPA entity: QuotaLimitRule in backend/src/main/java/com/olimeeter/fuel/models/QuotaLimitRule.java
-- [ ] T020 Create FuelTrackingApplication main class in backend/src/main/java/com/olimeeter/fuel/FuelTrackingApplication.java
+- [x] T008 Configure PostgreSQL datasource and Flyway migrations framework in backend/src/main/resources/application.yaml
+- [x] T009 Create Flyway migration V1__Create_core_schema.sql with Facility, User, MeasuringDevice tables in backend/src/main/resources/db/migration/
+- [x] T010 Create Flyway migration V2__Create_dispensing_schema.sql with DispensingRequest, DispensingRecord (immutable), DeviceAuditTrail tables in backend/src/main/resources/db/migration/
+- [x] T011 Create Flyway migration V3__Create_quota_and_config_schema.sql with QuotaLimitRule, WiFiConfiguration, BLESessionLog, MobileProxyPermission tables in backend/src/main/resources/db/migration/
+- [x] T012 [P] Implement Spring Security config with JWT authentication in backend/src/main/java/com/olimeeter/fuel/config/SecurityConfig.java
+- [x] T013 [P] Implement WebConfig (CORS, virtual threads) in backend/src/main/java/com/olimeeter/fuel/config/WebConfig.java
+- [x] T014 [P] Create ChecksumUtil (SHA-256 validation) in backend/src/main/java/com/olimeeter/fuel/util/ChecksumUtil.java
+- [x] T015 [P] Create IdempotencyUtil (UUID deduplication) in backend/src/main/java/com/olimeeter/fuel/util/IdempotencyUtil.java
+- [x] T016 [P] Create base JPA entities: Facility in backend/src/main/java/com/olimeeter/fuel/models/Facility.java
+- [x] T017 [P] Create base JPA entity: User in backend/src/main/java/com/olimeeter/fuel/models/User.java
+- [x] T018 [P] Create base JPA entity: MeasuringDevice in backend/src/main/java/com/olimeeter/fuel/models/MeasuringDevice.java
+- [x] T019 [P] Create base JPA entity: QuotaLimitRule in backend/src/main/java/com/olimeeter/fuel/models/QuotaLimitRule.java
+- [x] T020 Create FuelTrackingApplication main class in backend/src/main/java/com/olimeeter/fuel/FuelTrackingApplication.java
 
 ### ESP32 Foundation
 
-- [ ] T021 [P] Create config.h with WiFi, backend URL, device ID, and BLE settings in esp32-firmware/src/config.h
-- [ ] T022 [P] Create main.cpp entry point with setup/loop skeleton in esp32-firmware/src/main.cpp
+- [x] T021 [P] Create config.h with WiFi, backend URL, device ID, and BLE settings in esp32-firmware/src/config.h
+- [x] T022 [P] Create main.cpp entry point with setup/loop skeleton in esp32-firmware/src/main.cpp
 
 ### Frontend Foundation
 
-- [ ] T023 [P] Configure Vite build with Ant Design 6.2.0 and React Router in frontend/vite.config.ts
-- [ ] T024 [P] Create App.tsx with routing skeleton in frontend/src/App.tsx
-- [ ] T025 [P] Create REST API client service with SWR hooks in frontend/src/services/api.ts
-- [ ] T026 [P] Create TypeScript type definitions matching backend models in frontend/src/types/models.ts and frontend/src/types/api.ts
+- [x] T023 [P] Configure Vite build with Ant Design 6.2.0 and React Router in frontend/vite.config.ts
+- [x] T024 [P] Create App.tsx with routing skeleton in frontend/src/App.tsx
+- [x] T025 [P] Create REST API client service with SWR hooks in frontend/src/services/api.ts
+- [x] T026 [P] Create TypeScript type definitions matching backend models in frontend/src/types/models.ts and frontend/src/types/api.ts
 
 **Checkpoint**: Foundation ready — user story implementation can now begin
 
