@@ -109,17 +109,37 @@ docker run -d \
 
 ### 3. Backend
 
+**Option A: Dev profile (recommended for quick start — no PostgreSQL needed)**
+
+Uses an H2 in-memory database with mock data pre-loaded (2 facilities, 5 users, 4 devices, sample dispensing records):
+
 ```bash
 cd backend
-
-# Run with Gradle wrapper (downloads Gradle automatically)
-./gradlew bootRun
-
-# Or with system Gradle
-gradle bootRun
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
-The backend starts on `http://localhost:8080`. Flyway runs migrations automatically on startup.
+H2 console available at `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:olimeeter`, user: `sa`, no password).
+
+All mock user passwords: `password123`
+
+| User | Role | Facility |
+|------|------|----------|
+| `admin` | admin | Central Storage Depot |
+| `alice_supervisor` | supervisor | Central Storage Depot |
+| `bob_driver` | user | Central Storage Depot |
+| `carol_operator` | user | Central Storage Depot |
+| `dave_north` | user | North Warehouse |
+
+**Option B: PostgreSQL profile (production-like)**
+
+Requires a running PostgreSQL instance. Flyway runs migrations automatically.
+
+```bash
+cd backend
+./gradlew bootRun
+```
+
+The backend starts on `http://localhost:8080`.
 
 **Verify**: `curl http://localhost:8080/actuator/health`
 
