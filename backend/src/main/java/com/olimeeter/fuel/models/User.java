@@ -8,35 +8,37 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Domain-specific user profile linked to Keycloak identity.
+ * <p>
+ * Authentication and role management are handled entirely by Keycloak.
+ * This entity stores only domain-specific fields (facility, quota config).
+ * Roles are read from JWT realm_access.roles claim per request — no role column here.
+ * <p>
+ * Auto-provisioned on first authenticated API call via UserProvisioningService.
+ */
 @Entity
 @Table(name = "users")
 public class User {
 
-    public enum Role {
-        user, supervisor, admin
-    }
-
+    /** Keycloak user ID (sub claim from JWT) — primary key */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @Column(name = "keycloak_sub", nullable = false, length = 255)
+    private String keycloakSub;
 
-    @Column(nullable = false, unique = true, length = 100)
-    private String username;
+    /** Username from Keycloak (preferred_username claim) */
+    @Column(name = "keycloak_username", nullable = false, unique = true, length = 100)
+    private String keycloakUsername;
 
-    @Column(nullable = false, unique = true, length = 100)
-    private String email;
+    /** Email from Keycloak (email claim) */
+    @Column(name = "keycloak_email", nullable = false, unique = true, length = 100)
+    private String keycloakEmail;
 
     @Column(name = "full_name", length = 200)
     private String fullName;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "user_role")
-    private Role role = Role.user;
-
-    @Column(name = "facility_id", nullable = false)
+    /** Facility assignment — nullable until admin completes profile */
+    @Column(name = "facility_id")
     private UUID facilityId;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -68,23 +70,17 @@ public class User {
 
     // Getters and setters
 
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public String getKeycloakSub() { return keycloakSub; }
+    public void setKeycloakSub(String keycloakSub) { this.keycloakSub = keycloakSub; }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public String getKeycloakUsername() { return keycloakUsername; }
+    public void setKeycloakUsername(String keycloakUsername) { this.keycloakUsername = keycloakUsername; }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
+    public String getKeycloakEmail() { return keycloakEmail; }
+    public void setKeycloakEmail(String keycloakEmail) { this.keycloakEmail = keycloakEmail; }
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
-
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
-
-    public Role getRole() { return role; }
-    public void setRole(Role role) { this.role = role; }
 
     public UUID getFacilityId() { return facilityId; }
     public void setFacilityId(UUID facilityId) { this.facilityId = facilityId; }

@@ -37,7 +37,7 @@ public class QuotaLimitRule {
     private RuleType ruleType;
 
     @Column(name = "applies_to_user_id")
-    private UUID appliesToUserId;
+    private String appliesToUserId;
 
     @Column(name = "applies_to_role", length = 50)
     private String appliesToRole;
@@ -91,8 +91,8 @@ public class QuotaLimitRule {
     public RuleType getRuleType() { return ruleType; }
     public void setRuleType(RuleType ruleType) { this.ruleType = ruleType; }
 
-    public UUID getAppliesToUserId() { return appliesToUserId; }
-    public void setAppliesToUserId(UUID appliesToUserId) { this.appliesToUserId = appliesToUserId; }
+    public String getAppliesToUserId() { return appliesToUserId; }
+    public void setAppliesToUserId(String appliesToUserId) { this.appliesToUserId = appliesToUserId; }
 
     public String getAppliesToRole() { return appliesToRole; }
     public void setAppliesToRole(String appliesToRole) { this.appliesToRole = appliesToRole; }

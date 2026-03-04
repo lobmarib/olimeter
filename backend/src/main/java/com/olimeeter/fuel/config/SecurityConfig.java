@@ -1,38 +1,38 @@
 package com.olimeeter.fuel.config;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    @Value("${app.jwt.secret}")
-    private String jwtSecret;
+    private final DeviceApiKeyFilter deviceApiKeyFilter;
+    private final UserProvisioningFilter userProvisioningFilter;
+
+    public SecurityConfig(DeviceApiKeyFilter deviceApiKeyFilter,
+                          UserProvisioningFilter userProvisioningFilter) {
+        this.deviceApiKeyFilter = deviceApiKeyFilter;
+        this.userProvisioningFilter = userProvisioningFilter;
+    }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -40,72 +40,53 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Device endpoints use header-based auth (Device-ID)
+                        // Device endpoints use X-Device-Key header auth
                         .requestMatchers("/api/v1/measurements").permitAll()
+                        .requestMatchers("/api/v1/devices/*/relay/**").permitAll()
                         // Admin endpoints require admin role
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        // All other API endpoints require authentication
+                        // All other API endpoints require Keycloak JWT
                         .requestMatchers("/api/v1/**").authenticated()
-                        // Actuator and health
+                        // Actuator, health, H2 console
                         .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/h2-console/**").permitAll()
                         .anyRequest().permitAll()
                 )
-                .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class)
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                )
+                // Device API key filter runs before OAuth2 for device endpoints
+                .addFilterBefore(deviceApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
+                // User provisioning runs after JWT authentication
+                .addFilterAfter(userProvisioningFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
+                // Allow H2 console frames
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .build();
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+        return converter;
     }
 
-    @Bean
-    public SecretKey jwtSecretKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
-    }
-
-    @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtSecretKey());
-    }
-
-    public static class JwtAuthenticationFilter extends OncePerRequestFilter {
-
-        private final SecretKey secretKey;
-
-        public JwtAuthenticationFilter(SecretKey secretKey) {
-            this.secretKey = secretKey;
-        }
-
+    /**
+     * Extracts roles from Keycloak JWT realm_access.roles claim
+     * and maps them to Spring Security ROLE_ authorities.
+     */
+    static class KeycloakRealmRoleConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
         @Override
-        protected void doFilterInternal(HttpServletRequest request,
-                                        HttpServletResponse response,
-                                        FilterChain filterChain) throws ServletException, IOException {
-            String header = request.getHeader("Authorization");
-            if (header != null && header.startsWith("Bearer ")) {
-                String token = header.substring(7);
-                try {
-                    Claims claims = Jwts.parser()
-                            .verifyWith(secretKey)
-                            .build()
-                            .parseSignedClaims(token)
-                            .getPayload();
-
-                    String userId = claims.getSubject();
-                    String role = claims.get("role", String.class);
-
-                    List<SimpleGrantedAuthority> authorities = List.of(
-                            new SimpleGrantedAuthority("ROLE_" + role.toUpperCase())
-                    );
-
-                    var authentication = new UsernamePasswordAuthenticationToken(
-                            userId, null, authorities);
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                } catch (Exception e) {
-                    SecurityContextHolder.clearContext();
-                }
+        @SuppressWarnings("unchecked")
+        public Collection<GrantedAuthority> convert(Jwt jwt) {
+            Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+            if (realmAccess == null || !realmAccess.containsKey("roles")) {
+                return Collections.emptyList();
             }
-            filterChain.doFilter(request, response);
+            List<String> roles = (List<String>) realmAccess.get("roles");
+            return roles.stream()
+                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+                    .collect(Collectors.toList());
         }
     }
 }

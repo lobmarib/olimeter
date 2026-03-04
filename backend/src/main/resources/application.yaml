@@ -37,16 +37,28 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/olimeeter}
+
 server:
   port: 8080
 
 app:
-  jwt:
-    secret: ${JWT_SECRET:default-dev-secret-change-in-production-min-256-bits-long!!}
-    expiration-ms: 86400000
-
+  device-api-key: ${DEVICE_API_KEY:dev-device-secret-change-in-production}
   cors:
     allowed-origins: http://localhost:3000,http://localhost:8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
 
 logging:
   level:

@@ -1,18 +1,14 @@
 import useSWR, { type SWRConfiguration } from "swr";
+import { getToken } from "./auth";
 
 const API_BASE = "/api/v1";
 
-/** Get auth token from storage */
-function getAuthToken(): string | null {
-  return localStorage.getItem("auth_token");
-}
-
-/** Authenticated fetch wrapper */
+/** Authenticated fetch wrapper — uses Keycloak token */
 async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const token = getAuthToken();
+  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

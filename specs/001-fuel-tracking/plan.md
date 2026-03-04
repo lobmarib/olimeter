@@ -5,7 +5,7 @@
 
 ## Summary
 
-Build a comprehensive fuel/oil dispensing tracking system with IoT integration. ESP32 devices measure fuel volume through relay-controlled pumps with multi-channel communication: REST API (primary WiFi-based sync) + MQTT (Home Assistant) + BLE fallback (via mobile app bridge when WiFi unavailable). System enforces flexible quota management (user/role/daily/monthly), provides immutable audit trails, and ensures zero data loss through offline queueing and checksums. WiFi configuration is user-friendly (OTA-updateable, supports multiple predefined SSIDs). Architecture: REST API backend (Spring Boot 4.0.1/Java 25) + Web UI (React 19.2.4) + Mobile app (React Native with BLE service) + IoT firmware (ESP32/PlatformIO with OTA + BLE + WiFi provisioning).
+Build a comprehensive fuel/oil dispensing tracking system with IoT integration. ESP32 devices measure fuel volume through relay-controlled pumps with multi-channel communication: REST API (primary WiFi-based sync) + MQTT (Home Assistant) + BLE fallback (via mobile app bridge when WiFi unavailable). System enforces flexible quota management (user/role/daily/monthly), provides immutable audit trails, and ensures zero data loss through offline queueing and checksums. WiFi configuration is user-friendly (OTA-updateable, supports multiple predefined SSIDs). **Identity & Access Management** delegated to **Keycloak** (Apache 2.0): handles user CRUD, role management, JWT issuance, and admin UI. Backend is an OAuth2 resource server validating Keycloak-issued JWTs; ESP32 devices use separate pre-shared API key authentication. Architecture: REST API backend (Spring Boot 4.0.1/Java 25) + Web UI (React 19.2.4) + Mobile app (React Native with BLE service) + IoT firmware (ESP32/PlatformIO with OTA + BLE + WiFi provisioning) + Keycloak IAM.
 
 ## Technical Context
 
@@ -32,8 +32,13 @@ Build a comprehensive fuel/oil dispensing tracking system with IoT integration. 
 
 **Backend**:
 - Language/Version: Java 25 with Spring Boot 4.0.1
-- Primary Dependencies: Spring Web, Spring Data JPA, Spring Security, Gradle 9.3.0
+- Primary Dependencies: Spring Web, Spring Data JPA, Spring Security, spring-boot-starter-oauth2-resource-server, Gradle 9.3.0
+- **Authentication**: Keycloak (Apache 2.0) as external IAM; backend validates Keycloak-issued JWTs via OAuth2 resource server configuration
+- **Authorization**: Roles (user/supervisor/admin) read from JWT `realm_access.roles` claim — no role column in backend User table
+- **User Provisioning**: Auto-create local User profile on first authenticated API call (from JWT sub, preferred_username, email). Admin assigns facility/quota afterward
+- **Device Auth**: ESP32 uses pre-shared API key (X-Device-Key header), independent of Keycloak
 - Storage: PostgreSQL 15+
+- Observability: Structured JSON logging + Spring Boot Actuator health/metrics endpoints
 - Testing: JUnit 5, Mockito, TestContainers for integration tests
 - Target Platform: Linux server (containerized)
 - Performance Goals: Handle 100+ concurrent dispensing requests, <200ms API response, 99.9% availability
@@ -104,6 +109,7 @@ Build a comprehensive fuel/oil dispensing tracking system with IoT integration. 
 - Single database (PostgreSQL), no complex caching layer
 - REST + MQTT for communication (well-understood patterns)
 - Standard component libraries (Ant Design, React Navigation)
+- Keycloak adds infrastructure (Docker container) but **eliminates** custom auth code (user CRUD, password management, login flows, role management UI)
 - Deferred: override workflows, admin dashboards (P2/P3 features)
 
 **Principle VI - Hardware-Backend Synchronization**: ✅ PASS (CRITICAL & ENHANCED)
@@ -165,10 +171,13 @@ esp32-firmware/                    # PRIORITY 1: IoT firmware with OTA
 
 backend/                           # PRIORITY 2: Spring Boot REST API
 ├── build.gradle.kts               # Gradle config (Java 25)
+├── docker-compose.yaml            # Keycloak + PostgreSQL for local dev
 ├── src/main/java/
 │   └── com/olimeeter/fuel/
 │       ├── FuelTrackingApplication.java
 │       ├── models/
+│       │   ├── User.java              # Domain profile (keycloak_sub PK, no password/role)
+│       │   ├── Facility.java
 │       │   ├── DispensingRequest.java
 │       │   ├── DispensingRecord.java
 │       │   ├── MeasuringDevice.java
@@ -177,6 +186,7 @@ backend/                           # PRIORITY 2: Spring Boot REST API
 │       │   ├── DispensingService.java
 │       │   ├── QuotaService.java
 │       │   ├── MeasurementService.java
+│       │   ├── UserProvisioningService.java  # Auto-create User from JWT on first login
 │       │   └── DeviceSyncService.java
 │       ├── api/
 │       │   ├── DispensingController.java
@@ -184,21 +194,25 @@ backend/                           # PRIORITY 2: Spring Boot REST API
 │       │   ├── DeviceController.java
 │       │   └── HistoryController.java
 │       ├── repository/
+│       │   ├── UserRepository.java
 │       │   ├── DispensingRequestRepository.java
 │       │   ├── DispensingRecordRepository.java
 │       │   └── QuotaRuleRepository.java
 │       ├── config/
-│       │   ├── SecurityConfig.java
+│       │   ├── SecurityConfig.java    # OAuth2 resource server + device API key filter
 │       │   ├── WebConfig.java
 │       │   └── MqttConfig.java (MQTT publisher)
 │       └── util/
 │           ├── ChecksumUtil.java (SHA-256)
 │           └── IdempotencyUtil.java
 ├── src/main/resources/
-│   ├── application.yaml (config for Spring Boot)
+│   ├── application.yaml           # Keycloak issuer-uri, OAuth2 resource server config
+│   ├── application-dev.yaml       # H2 in-memory, Flyway disabled, mock data
 │   ├── db/migration/ (Flyway migrations)
-│   │   ├── V1__Create_dispensing_schema.sql
-│   │   └── V2__Add_quota_rules.sql
+│   │   ├── V1__Create_core_schema.sql
+│   │   ├── V2__Create_dispensing_schema.sql
+│   │   └── V3__Create_quota_and_config_schema.sql
+│   ├── db/data-dev.sql            # Mock data for dev profile
 │   └── mqtt/
 │       └── topics.yaml (Home Assistant MQTT mapping)
 └── src/test/java/ (JUnit 5, Mockito, TestContainers)
@@ -223,7 +237,7 @@ frontend/                          # PRIORITY 3: React web UI
 │   │   └── AdminPage.tsx (P3 feature)
 │   ├── services/
 │   │   ├── api.ts (REST client, SWR hooks)
-│   │   └── auth.ts
+│   │   └── auth.ts (Keycloak OIDC login/logout via keycloak-js)
 │   ├── styles/
 │   │   └── global.less (Ant Design theming)
 │   └── types/
@@ -245,7 +259,7 @@ mobile/                            # PRIORITY 4: React Native mobile app
 │   │   └── SettingsScreen.tsx
 │   ├── services/
 │   │   ├── api.ts (REST client)
-│   │   ├── auth.ts (native secure storage)
+│   │   ├── auth.ts (Keycloak OIDC via react-native-app-auth)
 │   │   └── offline.ts (AsyncStorage cache)
 │   ├── types/
 │   │   └── models.ts (shared with backend)
@@ -327,9 +341,12 @@ shared/                            # Optional: Shared types/utilities
    - QoS levels (0, 1, 2) and persistence trade-offs
    - Shared message structure between REST and MQTT events
 
-8. **Spring Boot 4.0.1 with Java 25**
+8. **Spring Boot 4.0.1 with Java 25 + Keycloak Integration**
    - Virtual threads for concurrent connections (Project Loom)
-   - Spring Security 6.x authentication/authorization patterns
+   - **Keycloak as OAuth2 Authorization Server**: realm/client setup, role mapping (user/supervisor/admin)
+   - **spring-boot-starter-oauth2-resource-server**: JWT validation, issuer-uri configuration, role extraction from `realm_access.roles`
+   - **User auto-provisioning**: Filter/interceptor to create local User profile on first authenticated API call from JWT claims (sub, preferred_username, email)
+   - **Dual auth model**: Keycloak JWT for human users + pre-shared API key filter for ESP32 devices
    - Spring Data JPA best practices for large datasets
    - Handling BLE-proxied requests (trust chain from mobile app)
 
@@ -366,7 +383,7 @@ Key entities from spec (to be expanded with field details, validation rules, sta
 - **Dispensing Request** (user initiates fuel request)
 - **Dispensing Record** (immutable ledger of completed dispensing)
 - **Measuring Device** (physical ESP32 device metadata)
-- **User** (authorization context, quota assignments)
+- **User** (domain profile linked to Keycloak identity via `keycloak_sub`; no password_hash or role column — roles from JWT `realm_access.roles`; auto-provisioned on first login)
 - **Quota Limit Rule** (flexible quota configuration)
 - **Device Audit Trail** (ESP32 activation/deactivation events)
 - **WiFi Configuration** (SSID profiles, OTA-updateable credentials per device)
@@ -425,7 +442,8 @@ Priority contracts (in order of implementation):
 
 Quickstart will include:
 - Prerequisites: Docker, VSCode extensions, Java 25, Node.js LTS, PlatformIO CLI, ESP32 simulator
-- Services: PostgreSQL container, MQTT broker (Mosquitto), Bluetooth simulator for testing
+- Services: PostgreSQL container, **Keycloak container** (with pre-configured realm, clients, and test users), MQTT broker (Mosquitto), Bluetooth simulator for testing
+- Keycloak setup: Dev realm with olimeeter client, test users (admin, supervisor, driver) with roles, redirect URIs for frontend/mobile
 - Database initialization: Flyway migrations
 - Frontend dev server: Vite with hot reload
 - Backend dev server: Gradle bootRun (with BLE proxy endpoints)
@@ -462,7 +480,7 @@ This script will add:
 1. **Complete Phase 0**: Run research agents for unknowns resolution → `research.md`
 2. **Complete Phase 1**: Generate data-model.md, contracts/, quickstart.md
 3. **Execute Phase 2**: Run `/speckit.tasks` to generate task list (`tasks.md`)
-4. **Begin Implementation**: Start with Priority 1 (ESP32 firmware) per user requirements
+4. **Begin Implementation**: Start with Keycloak IAM setup, then backend auth integration, then ESP32 firmware
 
 ---
 
@@ -470,20 +488,27 @@ This script will add:
 
 Per user specification, execution order prioritizes OTA capability, multi-channel WiFi/BLE communication, and ESP32 robustness:
 
-1. **Phase 2.0-1**: ESP32 Firmware Foundation (relay control, meter sensor, OTA)
-2. **Phase 2.0-2**: ESP32 WiFi Management (provisioning, SSID profiles, OTA config updates)
-3. **Phase 2.0-3**: ESP32 BLE Implementation (peripheral mode, GATT services for measurements)
-4. **Phase 2.0-4**: ESP32 Communication Layers (REST API client + BLE + offline queueing)
-5. **Phase 2.0-5**: ESP32 MQTT Integration (Home Assistant topics, connectivity status)
-6. **Phase 2.1**: Mobile App BLE Service (React Native BLE client, WiFi/BLE fallback detection)
-7. **Phase 2.1-2**: Backend BLE Proxy API (WiFi config endpoint, BLE measurement relay)
-8. **Phase 2.2**: Backend REST API (dispensing requests, measurements, quota, device management)
-9. **Phase 2.3**: Frontend Web UI (dispensing form, history display)
-10. **Phase 2.4**: Admin Features (P2/P3 user stories, device connectivity dashboard)
+1. **Phase 2.0-0**: **Keycloak IAM Setup** (Docker container, realm configuration, client registration, test users with roles, realm export for reproducible dev setup)
+2. **Phase 2.0-1**: **Backend Auth Integration** (OAuth2 resource server config, JWT validation with Keycloak issuer-uri, role extraction from `realm_access.roles`, device API key filter, user auto-provisioning service)
+3. **Phase 2.0-2**: ESP32 Firmware Foundation (relay control, meter sensor, OTA)
+4. **Phase 2.0-3**: ESP32 WiFi Management (provisioning, SSID profiles, OTA config updates)
+5. **Phase 2.0-4**: ESP32 BLE Implementation (peripheral mode, GATT services for measurements)
+6. **Phase 2.0-5**: ESP32 Communication Layers (REST API client + BLE + offline queueing)
+7. **Phase 2.0-6**: ESP32 MQTT Integration (Home Assistant topics, connectivity status)
+8. **Phase 2.1**: Mobile App BLE Service (React Native BLE client, WiFi/BLE fallback detection)
+9. **Phase 2.1-2**: Backend BLE Proxy API (WiFi config endpoint, BLE measurement relay)
+10. **Phase 2.2**: Backend REST API (dispensing requests, measurements, quota, device management)
+11. **Phase 2.3**: Frontend Web UI (dispensing form, history display, Keycloak login redirect)
+12. **Phase 2.4**: Admin Features (P2/P3 user stories, device connectivity dashboard)
 
 **Critical Additions** (user requirements):
+- **Keycloak** handles all user CRUD, password management, role assignment, and login flows — no custom auth UI needed
+- Backend auto-provisions local User profile on first authenticated API call (from JWT sub, preferred_username, email)
+- Roles read from JWT `realm_access.roles` per request — no role column in backend User table
+- ESP32 devices authenticated via pre-shared API key (X-Device-Key header), independent of Keycloak
 - WiFi configuration must be OTA-updateable with predefined SSID profiles
 - Mobile device used for dispensing request acts as BLE bridge when WiFi unavailable
 - Mobile app transmits ESP32 data to backend via REST, receives commands, relays back via BLE
+- Structured JSON logging + Spring Boot Actuator for observability (no external stack in MVP)
 
-This order ensures hardware-backend multi-channel synchronization is robust before frontend complexity increases.
+This order ensures IAM infrastructure is established first, then hardware-backend multi-channel synchronization is robust before frontend complexity increases.

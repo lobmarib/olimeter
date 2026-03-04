@@ -22,7 +22,7 @@ public class Facility {
     private String timezone = "UTC";
 
     @Column(name = "manager_user_id")
-    private UUID managerUserId;
+    private String managerUserId;
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
@@ -49,8 +49,8 @@ public class Facility {
     public String getTimezone() { return timezone; }
     public void setTimezone(String timezone) { this.timezone = timezone; }
 
-    public UUID getManagerUserId() { return managerUserId; }
-    public void setManagerUserId(UUID managerUserId) { this.managerUserId = managerUserId; }
+    public String getManagerUserId() { return managerUserId; }
+    public void setManagerUserId(String managerUserId) { this.managerUserId = managerUserId; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

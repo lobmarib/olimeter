@@ -33,10 +33,14 @@ dependencies {
     // MQTT
     implementation("org.springframework.integration:spring-integration-mqtt")
 
-    // JWT
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    // OAuth2 Resource Server (Keycloak JWT validation)
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+
+    // Actuator (health/metrics)
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // Structured JSON logging (for production)
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

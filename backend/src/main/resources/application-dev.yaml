@@ -1,4 +1,4 @@
-# Dev profile: H2 in-memory database, no PostgreSQL required
+# Dev profile: H2 in-memory database, no PostgreSQL or Keycloak required
 # Run with: ./gradlew bootRun --args='--spring.profiles.active=dev'
 
 spring:
@@ -28,6 +28,13 @@ spring:
     init:
       mode: always
       data-locations: classpath:db/data-dev.sql
+
+  # Disable Keycloak JWT validation in dev — use mock security instead
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8180/realms/olimeeter
 
 logging:
   level:

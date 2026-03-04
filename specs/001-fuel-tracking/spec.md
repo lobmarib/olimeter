@@ -18,6 +18,14 @@
 
 - Q1: Dispensing request approval triggers relay → A: Yes, approval immediately activates relay (Backend approves → sends activation signal to ESP32 → relay enables → fuel flows automatically. No additional physical device authentication needed.)
 
+### Clarifications - Session 2026-03-03
+
+- Q1: User management approach → A: Use Keycloak (Apache 2.0) as external IAM. Keycloak handles user CRUD, role management (user/supervisor/admin), JWT issuance, and provides admin UI for backoffice user management. Backend becomes an OAuth2 resource server validating Keycloak-issued JWTs. Custom User entity retained for domain-specific fields (facility_id, quota_config_json) linked to Keycloak user ID.
+- Q2: Backend user profile provisioning → A: Sync on first login. When a Keycloak-authenticated user hits any API endpoint and no local profile exists, backend auto-creates a User record with Keycloak sub (user ID), username, and email from JWT claims. Admin assigns facility and quota afterward.
+- Q3: Role storage strategy → A: JWT-only roles. No role column in backend users table. Roles managed exclusively in Keycloak and read from JWT realm_access.roles claim on each request. Single source of truth in Keycloak.
+- Q4: Observability approach → A: Structured logging (JSON) + Spring Boot Actuator health/metrics endpoints. No external observability stack (Grafana/Prometheus) in MVP scope.
+- Q5: ESP32 device authentication model → A: Separate device auth. ESP32 uses pre-shared API key or device certificate, independent of Keycloak. Keycloak is for human users only. Device identity verified via Device-ID header + shared secret.
+
 ---
 
 ### User Story 1 - Authorized User Requests Fuel Dispensing (Priority: P1)
@@ -121,13 +129,15 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - What if relay gets stuck in ON position (hardware failure)? (User must manually intervene; backend can force off command; measure actual volume to detect anomaly)
 - What if dispensing starts but the user is not at the device to stop it? (Session timeout cuts relay after defined period; user must submit new dispensing request to resume if needed)
 - What if backend approves dispensing but later decides to revoke during active session? (Backend sends revoke command to ESP32; ESP32 immediately cuts relay regardless of volume)
+- What if a Keycloak-authenticated user hits the API but has no facility assigned yet? (Return 403 with message "Profile incomplete — contact administrator to assign facility")
 
 ## Requirements
 
 ### Functional Requirements
 
-- **FR-001**: System MUST authenticate users before allowing dispensing requests
-- **FR-002**: System MUST authorize dispensing requests based on user permissions and account status
+- **FR-001**: System MUST authenticate users via Keycloak-issued JWT tokens (OAuth2 resource server) before allowing dispensing requests
+- **FR-002**: System MUST authorize dispensing requests based on Keycloak roles (user/supervisor/admin) and account status
+- **FR-002a**: System MUST auto-create a local User profile on first authenticated API call using Keycloak JWT claims (sub, preferred_username, email, realm roles). Users without an assigned facility MUST be blocked from dispensing requests until admin completes their profile
 - **FR-003**: System MUST accept a free-text destination field from users when requesting fuel dispensing
 - **FR-004**: System MUST communicate with ESP32 IoT devices via REST API or MQTT to receive measurements
 - **FR-005**: System MUST validate all measurement data includes: device ID, volume (liters), timestamp, and idempotency key
@@ -158,13 +168,17 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - **FR-030**: ESP32 MUST support manual user action to stop dispensing and cut relay power (implementation details to be defined)
 - **FR-031**: ESP32 MUST reject relay activation if it does not receive a valid approval signal from backend or user has no valid approved dispensing request
 - **FR-032**: System MUST log all relay activation/deactivation events with timestamp, user ID, device ID, and reason (approved, max_liters_reached, timeout, user_stop)
+- **FR-033**: Backend MUST use structured JSON logging for all application logs to enable machine-parseable log analysis
+- **FR-034**: Backend MUST expose Spring Boot Actuator health and metrics endpoints (/actuator/health, /actuator/metrics) for operational monitoring
+- **FR-035**: ESP32 device authentication MUST use a pre-shared API key (via X-Device-Key header) or device certificate, separate from Keycloak. Keycloak is for human users only
+- **FR-036**: Backend MUST validate ESP32 device identity via Device-ID header + shared secret on all measurement and relay control endpoints
 
 ### Key Entities
 
 - **Dispensing Request**: Represents a user's request to dispense fuel, includes user ID, destination (free text), timestamp, authorization status, expiration time, max_liters (remaining balance from applicable quota), and applicable limit type (role, user, daily, monthly, or custom)
 - **Dispensing Record**: Immutable ledger entry for completed fuel dispensing, includes volume (liters), device ID, measurement timestamp, authorized user ID, request destination, max_liters approved, and system receipt timestamp
 - **Measuring Device**: Represents a physical ESP32-based meter device, includes device ID, location, calibration info, and last communication timestamp
-- **User**: Represents an authorized system user with permission levels (regular user, administrator), assigned quota limits (daily/monthly/custom rules), and role-based limits
+- **User**: Domain-specific profile linked to Keycloak identity (via Keycloak sub claim as primary key). Auto-provisioned on first login with username/email from JWT. Stores facility_id, quota_config_json, and domain attributes. No password_hash or role column (authentication and role management handled entirely by Keycloak; roles read from JWT realm_access.roles claim per request)
 - **Quota Limit Rule**: Configurable rule defining maximum liters available, includes type (user-specific, role-based, daily, monthly, custom), limit value (liters), and period (if applicable)
 
 ## Success Criteria
@@ -190,8 +204,14 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 
 ## Assumptions
 
-- Users requesting fuel dispensing have already been registered and verified in the system (pre-validated)
-- Authorization checks are performed at the application level (not delegated to external auth service for this MVP)
+- Users requesting fuel dispensing have already been registered and verified in Keycloak (pre-validated)
+- Authentication is delegated to Keycloak (OAuth2/OIDC); backend validates Keycloak-issued JWTs as a resource server
+- User CRUD, password management, and role assignment are handled via Keycloak admin console (no custom backoffice needed for user management)
+- Domain-specific user data (facility_id, quota_config_json) stored in backend User entity linked by Keycloak user ID (sub claim)
+- Backend auto-creates a local User profile on first authenticated API call (sync on first login); admin assigns facility and quota afterward
+- Users without an assigned facility cannot submit dispensing requests (auto-provisioned profiles are incomplete until admin configures them)
+- Two authentication models coexist: Keycloak OAuth2/JWT for human users (web/mobile), pre-shared API key for ESP32 devices
+- ESP32 devices are registered in the backend measuring_devices table with a device-specific API key; Keycloak is not involved in device auth
 - ESP32 devices have WiFi connectivity (intermittently acceptable with local queueing)
 - Meter devices connected to ESP32 output digital pulse signals proportional to volume dispensed
 - Destinations are free-form text and do not require validation against predefined locations (for MVP)
@@ -223,4 +243,6 @@ An administrator can access a comprehensive view of all fuel dispensing activity
 - Session timeout duration definition (to be specified in operational configuration document)
 - Physical device UI/UX for manual stop action (to be defined in separate design document)
 - PIN/RFID/app scan authentication at physical device (to be defined in separate authentication design)
+- External observability stack (Grafana, Prometheus, Loki) — MVP uses Actuator endpoints and structured JSON logs only
+- Custom user registration, password reset, or login UI (handled by Keycloak login flows and admin console)
 - **Note**: Relay activation is automatic upon backend approval signal; no user authentication at physical device is required to start fuel flow in this MVP

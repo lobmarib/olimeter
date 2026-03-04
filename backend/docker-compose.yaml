@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: olimeeter-db
+    environment:
+      POSTGRES_DB: olimeeter
+      POSTGRES_USER: olimeeter
+      POSTGRES_PASSWORD: olimeeter
+    ports:
+      - "5432:5432"
+    volumes:
+      - olimeeter-pg-data:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: olimeeter-keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/olimeeter
+      KC_DB_USERNAME: olimeeter
+      KC_DB_PASSWORD: olimeeter
+      KC_DB_SCHEMA: keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8180:8080"
+    volumes:
+      - ./keycloak/olimeeter-realm.json:/opt/keycloak/data/import/olimeeter-realm.json:ro
+    depends_on:
+      - postgres
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: olimeeter-mqtt
+    command: mosquitto -c /mosquitto-no-auth.conf
+    ports:
+      - "1883:1883"
+
+volumes:
+  olimeeter-pg-data:

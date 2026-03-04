@@ -75,43 +75,33 @@ olimeeter/
 | **Gradle** | 9.3+ (or use wrapper) | Backend build |
 | **Node.js** | 20 LTS+ | Frontend, Mobile, Shared |
 | **PostgreSQL** | 15+ | Backend database |
-| **Docker** | Latest | Local PostgreSQL & MQTT broker |
+| **Docker** / **Docker Compose** | Latest | Local PostgreSQL, Keycloak & MQTT broker |
 | **PlatformIO CLI** | Latest | ESP32 firmware build |
 | **Python** | 3.9+ | PlatformIO dependency |
 
 ## Local Development Setup
 
-### 1. Database (PostgreSQL)
+### 1. Infrastructure (Docker Compose)
 
-Start PostgreSQL via Docker:
-
-```bash
-docker run -d \
-  --name olimeeter-db \
-  -e POSTGRES_DB=olimeeter \
-  -e POSTGRES_USER=olimeeter \
-  -e POSTGRES_PASSWORD=olimeeter \
-  -p 5432:5432 \
-  postgres:15
-```
-
-### 2. MQTT Broker (Mosquitto) - Optional
-
-Required only for Home Assistant integration testing:
+Start PostgreSQL, Keycloak, and Mosquitto together:
 
 ```bash
-docker run -d \
-  --name olimeeter-mqtt \
-  -p 1883:1883 \
-  eclipse-mosquitto:2 \
-  mosquitto -c /mosquitto-no-auth.conf
+cd backend
+docker compose up -d
 ```
 
-### 3. Backend
+This starts:
+- **PostgreSQL 15** on port `5432` (database: `olimeeter`, user/password: `olimeeter`)
+- **Keycloak 26** on port `8180` (admin console: `http://localhost:8180`, admin/admin)
+- **Mosquitto MQTT** on port `1883`
 
-**Option A: Dev profile (recommended for quick start — no PostgreSQL needed)**
+Keycloak auto-imports the `olimeeter` realm with pre-configured clients, roles, and test users on first startup.
 
-Uses an H2 in-memory database with mock data pre-loaded (2 facilities, 5 users, 4 devices, sample dispensing records):
+### 2. Backend
+
+**Option A: Dev profile (recommended for quick start — no PostgreSQL or Keycloak needed)**
+
+Uses an H2 in-memory database with mock data pre-loaded (2 facilities, 5 users, 4 devices, sample dispensing records). Requires Keycloak running for JWT validation (start with `docker compose up keycloak -d`).
 
 ```bash
 cd backend
@@ -120,19 +110,9 @@ cd backend
 
 H2 console available at `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:olimeeter`, user: `sa`, no password).
 
-All mock user passwords: `password123`
-
-| User | Role | Facility |
-|------|------|----------|
-| `admin` | admin | Central Storage Depot |
-| `alice_supervisor` | supervisor | Central Storage Depot |
-| `bob_driver` | user | Central Storage Depot |
-| `carol_operator` | user | Central Storage Depot |
-| `dave_north` | user | North Warehouse |
-
 **Option B: PostgreSQL profile (production-like)**
 
-Requires a running PostgreSQL instance. Flyway runs migrations automatically.
+Requires a running PostgreSQL instance and Keycloak. Flyway runs migrations automatically.
 
 ```bash
 cd backend
@@ -222,17 +202,116 @@ cd backend
 ./gradlew flywayMigrate
 ```
 
-| Migration | Tables Created |
-|-----------|---------------|
+| Migration | Description |
+|-----------|-------------|
 | V1 | `facilities`, `users`, `measuring_devices` |
 | V2 | `dispensing_requests`, `dispensing_records`, `device_audit_trail` |
 | V3 | `quota_limit_rules`, `wifi_configurations`, `ble_session_logs`, `mobile_proxy_permissions` |
+| V4 | Refactor `users` for Keycloak (keycloak_sub PK, drop password/role, update all FKs) |
+
+## Keycloak (Identity & Access Management)
+
+OliMeeter uses [Keycloak](https://www.keycloak.org/) (Apache 2.0) for authentication and authorization. Users authenticate via OpenID Connect (OIDC) with Authorization Code + PKCE flow.
+
+### Local Development
+
+Keycloak is included in the Docker Compose setup and auto-imports the `olimeeter` realm on first startup:
+
+```bash
+cd backend
+docker compose up keycloak -d
+```
+
+- **Admin Console**: `http://localhost:8180` (username: `admin`, password: `admin`)
+- **Realm**: `olimeeter`
+- **Client**: `olimeeter-app` (public client, PKCE)
+
+**Test Users** (all passwords: `password123`):
+
+| Username | Role | Facility |
+|----------|------|----------|
+| `admin` | admin | Central Storage Depot |
+| `alice_supervisor` | supervisor | Central Storage Depot |
+| `bob_driver` | user | Central Storage Depot |
+| `carol_operator` | user | Central Storage Depot |
+| `dave_north` | user | North Warehouse |
+
+**Realm Roles**: `admin`, `supervisor`, `user`
+
+The realm export is at `backend/keycloak/olimeeter-realm.json`. To regenerate after changes in the Keycloak admin console:
+
+```bash
+docker exec olimeeter-keycloak /opt/keycloak/bin/kc.sh export \
+  --dir /tmp/export --realm olimeeter
+docker cp olimeeter-keycloak:/tmp/export/olimeeter-realm.json backend/keycloak/olimeeter-realm.json
+```
+
+### Production Deployment
+
+For production, deploy Keycloak as a standalone service with its own PostgreSQL database:
+
+1. **Deploy Keycloak** using the [official Docker image](https://quay.io/repository/keycloak/keycloak) or the [Keycloak Operator](https://www.keycloak.org/operator/installation) for Kubernetes:
+
+   ```bash
+   docker run -d \
+     --name keycloak \
+     -e KC_DB=postgres \
+     -e KC_DB_URL=jdbc:postgresql://your-db-host:5432/keycloak \
+     -e KC_DB_USERNAME=keycloak \
+     -e KC_DB_PASSWORD=<strong-password> \
+     -e KC_HOSTNAME=auth.yourdomain.com \
+     -e KEYCLOAK_ADMIN=admin \
+     -e KEYCLOAK_ADMIN_PASSWORD=<strong-admin-password> \
+     -p 8443:8443 \
+     quay.io/keycloak/keycloak:26.0 start
+   ```
+
+2. **Import the realm** on first startup or via the admin console:
+   - Import `backend/keycloak/olimeeter-realm.json` as a starting point
+   - Update redirect URIs in the `olimeeter-app` client to match your production domain
+   - Remove test users and create real users via the admin console or user self-registration
+
+3. **Configure the backend** to point to your production Keycloak:
+
+   ```bash
+   export KEYCLOAK_ISSUER_URI=https://auth.yourdomain.com/realms/olimeeter
+   ```
+
+4. **Production checklist**:
+   - Enable HTTPS (Keycloak requires TLS in production mode)
+   - Set strong admin passwords
+   - Configure email for password reset / user self-registration
+   - Set up database backups for the Keycloak database
+   - Consider clustering for high availability
+   - Review and restrict CORS, redirect URIs, and web origins
+
+### Auth Architecture
+
+```
+┌──────────┐    OIDC/PKCE    ┌──────────┐
+│ Frontend │ ◄──────────────►│ Keycloak │
+│ (React)  │   login/token   │ IAM      │
+└────┬─────┘                 └──────────┘
+     │ Bearer JWT                  │
+     ▼                             │ JWT validation
+┌──────────┐     issuer-uri   ─────┘
+│ Backend  │ (validates JWT signature via Keycloak JWKS endpoint)
+│ (Spring) │
+└──────────┘
+
+ESP32 devices use a pre-shared API key (X-Device-Key header) — no Keycloak.
+```
+
+- **Human users**: Keycloak JWT → roles from `realm_access.roles` claim
+- **ESP32 devices**: `X-Device-Key` + `Device-ID` headers → `ROLE_DEVICE` authority
+- **User auto-provisioning**: Local User profile created on first authenticated API call from JWT claims
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JWT_SECRET` | dev default | JWT signing key (min 256 bits for production) |
+| `KEYCLOAK_ISSUER_URI` | `http://localhost:8180/realms/olimeeter` | Keycloak realm issuer URI for JWT validation |
+| `DEVICE_API_KEY` | `dev-device-secret-change-in-production` | Pre-shared API key for ESP32 device auth |
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/olimeeter` | Database URL |
 | `SPRING_DATASOURCE_USERNAME` | `olimeeter` | Database user |
 | `SPRING_DATASOURCE_PASSWORD` | `olimeeter` | Database password |
@@ -246,4 +325,4 @@ Full design documentation is in `specs/001-fuel-tracking/`:
 - **data-model.md** - Entity definitions (10 entities)
 - **contracts/** - OpenAPI specs for REST endpoints
 - **research.md** - Phase 0 research decisions
-- **tasks.md** - Implementation task list (77 tasks, 10 phases)
+- **tasks.md** - Implementation task list (97 tasks, 11 phases)

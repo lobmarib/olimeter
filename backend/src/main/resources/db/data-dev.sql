@@ -1,10 +1,10 @@
 -- =============================================================================
 -- Mock data for dev profile (H2 in-memory database)
 -- Loaded via spring.sql.init.data-locations on startup
+--
+-- Keycloak-aligned user model: keycloak_sub as PK, no password_hash or role.
+-- Users match the test users in backend/keycloak/olimeeter-realm.json.
 -- =============================================================================
-
--- Passwords are bcrypt hashes of "password123"
--- Generated with: BCryptPasswordEncoder().encode("password123")
 
 -- =============================================================================
 -- Facilities
@@ -16,39 +16,39 @@ VALUES
     ('a0000000-0000-0000-0000-000000000002', 'North Warehouse', '456 Industrial Ave, Porto, Portugal', 'Europe/Lisbon', true, TIMESTAMP '2026-01-15 00:00:00');
 
 -- =============================================================================
--- Users
+-- Users (Keycloak model: keycloak_sub PK, keycloak_username, keycloak_email)
 -- =============================================================================
 
-INSERT INTO users (id, username, email, full_name, password_hash, role, facility_id, quota_config_json, is_active, created_at, updated_at)
+INSERT INTO users (keycloak_sub, keycloak_username, keycloak_email, full_name, facility_id, quota_config_json, is_active, last_login, created_at, updated_at)
 VALUES
-    -- Admin
-    ('b0000000-0000-0000-0000-000000000001', 'admin', 'admin@olimeeter.com', 'System Administrator',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'admin',
-     'a0000000-0000-0000-0000-000000000001', NULL, true, TIMESTAMP '2026-01-01 08:00:00', TIMESTAMP '2026-01-01 08:00:00'),
+    -- Admin (keycloak_sub matches realm JSON user ID)
+    ('kc-admin-001', 'admin', 'admin@olimeeter.com', 'System Administrator',
+     'a0000000-0000-0000-0000-000000000001', NULL, true, TIMESTAMP '2026-03-01 08:00:00',
+     TIMESTAMP '2026-01-01 08:00:00', TIMESTAMP '2026-03-01 08:00:00'),
 
     -- Supervisor at Central Storage
-    ('b0000000-0000-0000-0000-000000000002', 'alice_supervisor', 'alice@olimeeter.com', 'Alice Johnson',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'supervisor',
-     'a0000000-0000-0000-0000-000000000001', '{"monthly_limit_liters": 500, "daily_limit_liters": 50}', true, TIMESTAMP '2026-01-15 08:00:00', TIMESTAMP '2026-01-15 08:00:00'),
+    ('kc-alice-002', 'alice_supervisor', 'alice@olimeeter.com', 'Alice Johnson',
+     'a0000000-0000-0000-0000-000000000001', '{"monthly_limit_liters": 500, "daily_limit_liters": 50}', true,
+     TIMESTAMP '2026-03-01 09:00:00', TIMESTAMP '2026-01-15 08:00:00', TIMESTAMP '2026-03-01 09:00:00'),
 
     -- Regular user at Central Storage
-    ('b0000000-0000-0000-0000-000000000003', 'bob_driver', 'bob@olimeeter.com', 'Bob Smith',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'user',
-     'a0000000-0000-0000-0000-000000000001', NULL, true, TIMESTAMP '2026-02-01 08:00:00', TIMESTAMP '2026-02-01 08:00:00'),
+    ('kc-bob-003', 'bob_driver', 'bob@olimeeter.com', 'Bob Smith',
+     'a0000000-0000-0000-0000-000000000001', NULL, true,
+     TIMESTAMP '2026-03-02 07:30:00', TIMESTAMP '2026-02-01 08:00:00', TIMESTAMP '2026-03-02 07:30:00'),
 
     -- Regular user at Central Storage
-    ('b0000000-0000-0000-0000-000000000004', 'carol_operator', 'carol@olimeeter.com', 'Carol Davis',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'user',
-     'a0000000-0000-0000-0000-000000000001', NULL, true, TIMESTAMP '2026-02-01 08:00:00', TIMESTAMP '2026-02-01 08:00:00'),
+    ('kc-carol-004', 'carol_operator', 'carol@olimeeter.com', 'Carol Davis',
+     'a0000000-0000-0000-0000-000000000001', NULL, true,
+     TIMESTAMP '2026-03-02 08:00:00', TIMESTAMP '2026-02-01 08:00:00', TIMESTAMP '2026-03-02 08:00:00'),
 
     -- User at North Warehouse
-    ('b0000000-0000-0000-0000-000000000005', 'dave_north', 'dave@olimeeter.com', 'Dave Wilson',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'user',
-     'a0000000-0000-0000-0000-000000000002', NULL, true, TIMESTAMP '2026-02-10 08:00:00', TIMESTAMP '2026-02-10 08:00:00');
+    ('kc-dave-005', 'dave_north', 'dave@olimeeter.com', 'Dave Wilson',
+     'a0000000-0000-0000-0000-000000000002', NULL, true,
+     TIMESTAMP '2026-02-28 10:00:00', TIMESTAMP '2026-02-10 08:00:00', TIMESTAMP '2026-02-28 10:00:00');
 
--- Set facility managers
-UPDATE facilities SET manager_user_id = 'b0000000-0000-0000-0000-000000000002' WHERE id = 'a0000000-0000-0000-0000-000000000001';
-UPDATE facilities SET manager_user_id = 'b0000000-0000-0000-0000-000000000005' WHERE id = 'a0000000-0000-0000-0000-000000000002';
+-- Set facility managers (keycloak_sub references)
+UPDATE facilities SET manager_user_id = 'kc-alice-002' WHERE id = 'a0000000-0000-0000-0000-000000000001';
+UPDATE facilities SET manager_user_id = 'kc-dave-005' WHERE id = 'a0000000-0000-0000-0000-000000000002';
 
 -- =============================================================================
 -- Measuring Devices (ESP32)
@@ -101,9 +101,9 @@ VALUES
      'role_based', NULL, 'supervisor', 'daily', 100.00, 'reject', true, 1,
      TIMESTAMP '2026-01-01 00:00:00', TIMESTAMP '2026-01-01 00:00:00'),
 
-    -- User-specific override: Bob gets extra 25L/day (75 total with role-based)
+    -- User-specific override: Bob gets 75L/day
     ('d0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001',
-     'user_specific', 'b0000000-0000-0000-0000-000000000003', NULL, 'daily', 75.00, 'reject', true, 10,
+     'user_specific', 'kc-bob-003', NULL, 'daily', 75.00, 'reject', true, 10,
      TIMESTAMP '2026-02-15 00:00:00', TIMESTAMP '2026-02-15 00:00:00'),
 
     -- North Warehouse: all users get 200L/day
@@ -118,36 +118,36 @@ VALUES
 INSERT INTO dispensing_requests (id, user_id, device_id, requested_liters, approved_liters, status, rejection_reason, destination, created_at, approved_at, dispensing_started_at, dispensing_ended_at)
 VALUES
     -- Completed request: Bob dispensed 25L yesterday
-    ('e0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000001', 'kc-bob-003',
      'c0000000-0000-0000-0000-000000000001', 50.00, 50.00, 'completed', NULL, 'Storage Tank A',
      TIMESTAMP '2026-03-01 09:00:00', TIMESTAMP '2026-03-01 09:00:05',
      TIMESTAMP '2026-03-01 09:01:00', TIMESTAMP '2026-03-01 09:15:30'),
 
     -- Completed request: Alice dispensed 30L two days ago
-    ('e0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002',
+    ('e0000000-0000-0000-0000-000000000002', 'kc-alice-002',
      'c0000000-0000-0000-0000-000000000001', 30.00, 30.00, 'completed', NULL, 'Generator Room',
      TIMESTAMP '2026-02-28 14:00:00', TIMESTAMP '2026-02-28 14:00:03',
      TIMESTAMP '2026-02-28 14:02:00', TIMESTAMP '2026-02-28 14:12:00'),
 
     -- Approved but not yet dispensed
-    ('e0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000004',
+    ('e0000000-0000-0000-0000-000000000003', 'kc-carol-004',
      'c0000000-0000-0000-0000-000000000002', 20.00, 20.00, 'approved', NULL, 'Vehicle Fleet - Truck 12',
      TIMESTAMP '2026-03-02 08:30:00', TIMESTAMP '2026-03-02 08:30:02',
      NULL, NULL),
 
     -- Rejected request: Carol exceeded quota
-    ('e0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000004',
+    ('e0000000-0000-0000-0000-000000000004', 'kc-carol-004',
      'c0000000-0000-0000-0000-000000000001', 100.00, 0.00, 'rejected', 'quota_exceeded', 'Emergency backup',
      TIMESTAMP '2026-03-02 10:00:00', NULL, NULL, NULL),
 
     -- Currently dispensing
-    ('e0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000005', 'kc-bob-003',
      'c0000000-0000-0000-0000-000000000001', 40.00, 40.00, 'dispensing', NULL, 'Tractor Field B',
      TIMESTAMP '2026-03-02 11:00:00', TIMESTAMP '2026-03-02 11:00:04',
      TIMESTAMP '2026-03-02 11:01:00', NULL),
 
     -- Pending request
-    ('e0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000005',
+    ('e0000000-0000-0000-0000-000000000006', 'kc-dave-005',
      'c0000000-0000-0000-0000-000000000003', 150.00, NULL, 'pending', NULL, 'North Silo Refill',
      TIMESTAMP '2026-03-02 11:30:00', NULL, NULL, NULL);
 
@@ -158,33 +158,33 @@ VALUES
 INSERT INTO dispensing_records (dispensing_request_id, device_id, user_id, volume_liters, measurement_timestamp, backend_received_at, communication_channel, checksum, idempotency_key, metadata_json, created_at)
 VALUES
     -- Bob's completed dispensing (3 measurement batches)
-    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'kc-bob-003',
      15.50, TIMESTAMP '2026-03-01 09:05:00', TIMESTAMP '2026-03-01 09:05:02', 'wifi',
      'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
      'f0000000-0000-0000-0000-000000000001', '{"battery_percent": 85, "signal_strength_dbm": -55, "queue_depth": 0}',
      TIMESTAMP '2026-03-01 09:05:02'),
 
-    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'kc-bob-003',
      20.30, TIMESTAMP '2026-03-01 09:10:00', TIMESTAMP '2026-03-01 09:10:03', 'wifi',
      'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3',
      'f0000000-0000-0000-0000-000000000002', '{"battery_percent": 84, "signal_strength_dbm": -56, "queue_depth": 0}',
      TIMESTAMP '2026-03-01 09:10:03'),
 
-    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'kc-bob-003',
      25.05, TIMESTAMP '2026-03-01 09:15:00', TIMESTAMP '2026-03-01 09:15:01', 'wifi',
      'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
      'f0000000-0000-0000-0000-000000000003', '{"battery_percent": 84, "signal_strength_dbm": -57, "queue_depth": 0}',
      TIMESTAMP '2026-03-01 09:15:01'),
 
     -- Alice's completed dispensing (via BLE proxy)
-    ('e0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002',
+    ('e0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001', 'kc-alice-002',
      30.00, TIMESTAMP '2026-02-28 14:10:00', TIMESTAMP '2026-02-28 14:10:05', 'ble-proxied',
      'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5',
      'f0000000-0000-0000-0000-000000000004', '{"battery_percent": 78, "signal_strength_dbm": -65, "queue_depth": 0, "ble_latency_ms": 145}',
      TIMESTAMP '2026-02-28 14:10:05'),
 
     -- Bob's in-progress dispensing (partial measurement so far)
-    ('e0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000003',
+    ('e0000000-0000-0000-0000-000000000005', 'c0000000-0000-0000-0000-000000000001', 'kc-bob-003',
      12.75, TIMESTAMP '2026-03-02 11:05:00', TIMESTAMP '2026-03-02 11:05:01', 'wifi',
      'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6',
      'f0000000-0000-0000-0000-000000000005', '{"battery_percent": 83, "signal_strength_dbm": -54, "queue_depth": 0}',
@@ -236,7 +236,7 @@ VALUES
 
 INSERT INTO ble_session_logs (id, mobile_user_id, device_id, session_start_at, session_end_at, measurements_count, data_bytes_transferred, status, signal_strength_dbm, round_trip_latency_ms, metadata_json, created_at)
 VALUES
-    ('20000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001',
+    ('20000000-0000-0000-0000-000000000001', 'kc-alice-002', 'c0000000-0000-0000-0000-000000000001',
      TIMESTAMP '2026-02-28 14:08:00', TIMESTAMP '2026-02-28 14:12:30', 1, 2048, 'completed',
      -65, 145, '{"mobile_device": "iPhone 15 Pro", "ble_mtu": 244, "retries": 0}',
      TIMESTAMP '2026-02-28 14:08:00');
@@ -247,19 +247,19 @@ VALUES
 
 INSERT INTO mobile_proxy_permissions (id, user_id, device_id, permission_type, is_active, granted_by_user_id, created_at)
 VALUES
-    ('30000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001',
-     'proxy', true, 'b0000000-0000-0000-0000-000000000001', TIMESTAMP '2026-02-01 00:00:00'),
+    ('30000000-0000-0000-0000-000000000001', 'kc-alice-002', 'c0000000-0000-0000-0000-000000000001',
+     'proxy', true, 'kc-admin-001', TIMESTAMP '2026-02-01 00:00:00'),
 
-    ('30000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000002',
-     'proxy', true, 'b0000000-0000-0000-0000-000000000001', TIMESTAMP '2026-02-01 00:00:00'),
+    ('30000000-0000-0000-0000-000000000002', 'kc-alice-002', 'c0000000-0000-0000-0000-000000000002',
+     'proxy', true, 'kc-admin-001', TIMESTAMP '2026-02-01 00:00:00'),
 
-    ('30000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003', 'c0000000-0000-0000-0000-000000000001',
-     'proxy', true, 'b0000000-0000-0000-0000-000000000002', TIMESTAMP '2026-02-15 00:00:00');
+    ('30000000-0000-0000-0000-000000000003', 'kc-bob-003', 'c0000000-0000-0000-0000-000000000001',
+     'proxy', true, 'kc-alice-002', TIMESTAMP '2026-02-15 00:00:00');
 
 -- =============================================================================
 -- Summary of mock data:
 --   2 Facilities (Central Storage, North Warehouse)
---   5 Users (1 admin, 1 supervisor, 3 regular)
+--   5 Users (admin, supervisor, 3 regular) — Keycloak model (keycloak_sub PK)
 --   4 Devices (2 online, 1 offline, 1 in maintenance)
 --   5 Quota rules (role-based + user-specific)
 --   6 Dispensing requests (completed, approved, rejected, dispensing, pending)
@@ -269,5 +269,10 @@ VALUES
 --   1 BLE session log
 --   3 Mobile proxy permissions
 --
--- All user passwords: password123
+-- Keycloak test users (all password: password123):
+--   admin          → kc-admin-001 (role: admin)
+--   alice_supervisor → kc-alice-002 (role: supervisor)
+--   bob_driver      → kc-bob-003 (role: user)
+--   carol_operator  → kc-carol-004 (role: user)
+--   dave_north      → kc-dave-005 (role: user)
 -- =============================================================================
